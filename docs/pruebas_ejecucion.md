@@ -1,50 +1,48 @@
-# Pruebas de ejecución
+# Reporte de Pruebas de Ejecución
 
-## Persona 1 - Interfaz de registro
+Este documento detalla las pruebas funcionales del prototipo AntCluster, validando el registro de datos, el almacenamiento en formato CSV y el análisis de agrupamiento con K-Means.
 
-| Codigo | Descripcion | Entrada | Resultado esperado | Estado |
+## Resumen de Pruebas
+
+| Fase | Descripción | Resultado Esperado | Estado | Evidencia |
 |---|---|---|---|---|
-| PR-001 | Inicio de la app | `streamlit run app.py` | Se muestra el titulo `AntCluster` | Pendiente |
-| PR-002 | Validacion de nombre vacio | Nombre vacio y monto valido | Se muestra un error claro indicando que el nombre no puede estar vacio | Pendiente |
-| PR-003 | Validacion de monto invalido | Nombre valido y monto `0` | Se muestra un error claro indicando que el monto debe ser mayor a 0 | Pendiente |
-| PR-004 | Registro exitoso | `Cafe`, `8`, `19/05/2026`, `10:30` | Se muestra el mensaje de registro correcto y el ultimo gasto en pantalla | Pendiente |
+| F1 | Registro e Interfaz | Ingreso de transacciones con validación de datos. | Exitoso | Figura 1 |
+| F2 | Persistencia CSV | Almacenamiento en data/gastos_usuario.csv. | Exitoso | Figura 1 |
+| F3 | Análisis K-Means | Clasificación automática de gastos y cálculo métrico. | Exitoso | Figura 2 |
+| F4 | Formateo Visual | Tabla con tipografía coloreada según el tipo de gasto. | Exitoso | Figura 2 |
 
-## Persona 2 - Gestion de datos CSV
+---
 
-| Codigo | Descripcion | Entrada | Resultado esperado | Estado |
-|---|---|---|---|---|
-| P2-001 | Guardar gasto en CSV | Registrar `Cafe` con monto `5` | El gasto se agrega en `data/gastos_usuario.csv` con id, fecha, hora y frecuencia | Pendiente |
-| P2-002 | Persistencia al recargar | Recargar la app despues de registrar un gasto | El gasto sigue apareciendo en la tabla | Pendiente |
-| P2-003 | Cargar dataset demo | Pulsar `Cargar dataset demo` | La tabla muestra los registros de `data/gastos_demo.csv` | Pendiente |
-| P2-004 | Descargar CSV | Pulsar `Descargar CSV` | Se descarga `gastos_usuario.csv` con los gastos actuales | Pendiente |
-| P2-005 | Reiniciar datos | Pulsar `Reiniciar datos` | La tabla queda vacia | Pendiente |
-| P2-006 | Verificar encabezados despues del reinicio | Abrir `data/gastos_usuario.csv` despues de reiniciar | El archivo queda vacio pero conserva `id,nombre,monto,fecha,hora,frecuencia` | Pendiente |
+## Casos de Prueba Validados
 
-## Persona 3 - Procesamiento y clustering
+### Interfaz de Registro
 
-| Codigo | Descripcion | Entrada | Resultado esperado | Estado |
-|---|---|---|---|---|
-| P3-001 | Cargar dataset demo y procesar | Pulsar `Analizar gastos` con `data/gastos_demo.csv` | El sistema calcula frecuencias mensuales sin errores | Pendiente |
-| P3-002 | Aplicar K-Means | Gastos con 2 clusters identificados | Se muestran dos grupos diferenciados (pequeños y grandes) | Pendiente |
-| P3-003 | Clasificar gastos correctamente | Ejecutar algoritmo completo | Cluster bajo = "Gasto Hormiga", Cluster alto = "Gasto Primario" | Pendiente |
-| P3-004 | Mostrar resumen de presupuesto | Presupuesto: `200 Bs`, Gastos totales: `120 Bs` | Se visualiza: Total gastado, Gastos hormiga, Gastos primarios, Porcentaje | Pendiente |
-| P3-005 | Visualizar grafico de clusters | Ejecutar analisis completo | Se genera grafico scatter con los 2 clusters claramente separados | Pendiente |
+| Código | Caso de Prueba | Resultado |
+|---|---|---|
+| PR-001 | Inicio de la aplicación | Se despliega el título AntCluster - Gestión de datos. |
+| PR-002 | Validación de nombre vacío | El sistema bloquea el registro si falta el nombre del gasto. |
+| PR-003 | Validación de monto inválido | El sistema bloquea montos de 0.00 o negativos. |
+| PR-004 | Registro exitoso de gasto | Se almacena la transacción y se actualizan los totales en pantalla. |
+
+### Procesamiento y Clustering
+
+| Código | Caso de Prueba | Resultado |
+|---|---|---|
+| P3-001 | Ejecución K-Means | El algoritmo procesa los gastos y define los centroides correspondientes. |
+| P3-002 | Clasificación Semántica | Se asignan las etiquetas Gasto Hormiga y Gasto Primario. |
+| P3-003 | Cálculo de Porcentajes | Se calcula el impacto de los gastos hormiga respecto al presupuesto (33.0%). |
+| P3-004 | Formateo de Tabla | La columna Tipo muestra texto coloreado en amarillo y verde. |
+
+---
 
 ## Evidencias Fotográficas
 
-A continuacion se presentan las capturas que demuestran el funcionamiento del sistema:
+### Figura 1. Flujo de Registro y Almacenamiento
+![Registro y Gestión de Datos](capturas/persona1_registro_gastos/registro_gasto.png)
 
-### 1. Registro de Gastos
-![Registro de gasto](capturas/registro_gasto.png)
+Descripción: Interfaz principal que muestra el formulario con los datos ingresados para Refresco con un monto de 8.00 Bs, la confirmación de guardado y la actualización de los indicadores generales.
 
-*Descripcion*: Interfaz de registro de un nuevo gasto con validaciones correctas.
+### Figura 2. Resumen Analítico y Segmentación por Color
+![Resultados del Análisis K-Means](capturas/persona1_registro_gastos/resumen_final.png)
 
-### 2. Grafico de Clusters
-![Grafico de clusters](capturas/grafico_clusters.png)
-
-*Descripcion*: Visualizacion de los dos clusters identificados por K-Means en el espacio 3D [Monto, Hora, Frecuencia].
-
-### 3. Resumen Final
-![Resumen final](capturas/resumen_final.png)
-
-*Descripcion*: Salida del analisis final mostrando clasificacion de gastos hormiga y primarios con porcentajes respecto al presupuesto.
+Descripción: Panel de resultados que despliega los totales calculados por el algoritmo y la tabla ordenada con las etiquetas Gasto Hormiga en color amarillo y Gasto Primario en color verde.
