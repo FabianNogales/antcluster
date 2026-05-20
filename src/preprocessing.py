@@ -1,3 +1,5 @@
+"""Funciones de preprocesamiento y vectorización para AntCluster."""
+
 import os
 import pandas as pd
 
@@ -27,12 +29,46 @@ def calcular_frecuencia_mensual_csv(ruta_entrada: str, ruta_salida: str = None) 
     diccionario_frecuencias = dict(zip(agrupaciones['nombre'], agrupaciones['frecuencia_calculada']))
     df_gastos['frecuencia'] = df_gastos['nombre'].map(diccionario_frecuencias)
     
-
     df_gastos = df_gastos.drop(columns=['timestamp_temporal'])
     if ruta_salida:
         df_gastos.to_csv(ruta_salida, index=False)
     return df_gastos
 
+def calcularHoraDecimal(horaString):
+    """
+    Convierte una hora en formato 'HH:MM' a un valor numérico decimal.
+    Ejemplo: '14:30' se convierte a 14.5.
+    Si el formato es inválido, retorna 0.0 por seguridad.
+    """
+    if pd.isna(horaString) or not isinstance(horaString, str) or ':' not in horaString:
+        return 0.0
+    
+    try:
+        partesHora = horaString.split(':')
+        horaReal = int(partesHora[0])
+        minutosDecimales = int(partesHora[1]) / 60.0
+        horaDecimal = horaReal + minutosDecimales
+        return round(horaDecimal, 2)
+    except (ValueError, IndexError):
+        return 0.0
+
+def vectorizarTransacciones(dfGastos):
+    """
+    Recibe un DataFrame de Pandas con los gastos crudos y devuelve la matriz
+    tridimensional [Monto, Hora, Frecuencia] lista para el algoritmo K-Means.
+    """
+    if dfGastos.empty:
+        return pd.DataFrame(columns=['monto', 'horaDecimal', 'frecuencia'])
+
+    dfProcesado = dfGastos.copy()
+
+    dfProcesado['monto'] = pd.to_numeric(dfProcesado['monto'], errors='coerce').fillna(0.0)
+    dfProcesado['horaDecimal'] = dfProcesado['hora'].apply(calcularHoraDecimal)
+    dfProcesado['frecuencia'] = pd.to_numeric(dfProcesado['frecuencia'], errors='coerce').fillna(0).astype(int)
+    
+    matrizVectores = dfProcesado[['monto', 'horaDecimal', 'frecuencia']]
+    
+    return matrizVectores
 
 if __name__ == "__main__":
     ruta_demo = os.path.join("data", "gastos_demo.csv")
@@ -41,4 +77,8 @@ if __name__ == "__main__":
     df_demo_resultado = calcular_frecuencia_mensual_csv(ruta_demo, ruta_salida=ruta_demo)
     if df_demo_resultado is not None:
         print(df_demo_resultado[['id', 'nombre', 'monto', 'fecha', 'frecuencia']].to_string(index=False))
+        print("\n--- MATRIZ VECTORIZADA ---")
+        matriz_final = vectorizarTransacciones(df_demo_resultado)
+        print(matriz_final.head())
+        
     df_usuario_resultado = calcular_frecuencia_mensual_csv(ruta_usuario, ruta_salida=ruta_usuario)
