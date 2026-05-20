@@ -1,4 +1,3 @@
-﻿"""Módulo de utilidades.
+"""Utilidades compartidas para AntCluster."""
 
-Aquí irán funciones auxiliares de soporte para el proyecto.
-"""
+# TODO: Agregar funciones auxiliares segun se necesiten.

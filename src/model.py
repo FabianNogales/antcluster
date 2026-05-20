@@ -1,4 +1,3 @@
-﻿"""Módulo de modelado.
+"""Modelo de clustering para AntCluster."""
 
-Aquí se implementará el modelo de clustering K-Means.
-"""
+# TODO: Implementar K-Means con K=2 en una etapa posterior.

@@ -1,1 +1,1 @@
-﻿"""Paquete principal de módulos de HormigApp IA."""
+"""Paquete base de AntCluster."""

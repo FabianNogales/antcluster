@@ -1,27 +1,44 @@
-﻿# Entorno virtual
+# Entornos virtuales
 venv/
+.venv/
+env/
+ENV/
 
-# Python cache y compilados
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/config.toml
 
 # Variables de entorno
 .env
+.env.*
 
 # Jupyter
 .ipynb_checkpoints/
 
-# Sistema operativo
+# Sistema operativo y editores
 .DS_Store
 Thumbs.db
 Desktop.ini
+.vscode/
+.idea/
 
-# Archivos temporales
+# Temporales
+*.log
 *.tmp
 *.temp
 *~

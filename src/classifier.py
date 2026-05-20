@@ -1,4 +1,3 @@
-﻿"""Módulo de clasificación semántica.
+"""Clasificacion semantica de clusters para AntCluster."""
 
-Aquí se interpretarán los clusters como "Gasto Hormiga" o "Gasto Primario".
-"""
+# TODO: Interpretar los clusters como tipos de gasto en una etapa posterior.

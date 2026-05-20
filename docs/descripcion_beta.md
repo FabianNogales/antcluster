@@ -1,21 +1,16 @@
-﻿# Descripción de la Beta
+# Descripcion de la beta
 
-## Objetivo de la beta
-Definir y validar la estructura inicial del prototipo para segmentación de gastos hormiga.
+## Objetivo
+Construir la base inicial de AntCluster para registrar gastos desde una interfaz web y preparar el proyecto para futuras etapas de aprendizaje no supervisado.
 
-## Alcance
-- Organización base del repositorio
-- Preparación de módulos para procesamiento y modelado
-- Estructura de documentación inicial
+## Alcance de Persona 1
+- Crear la interfaz en Streamlit
+- Registrar nombre, monto, fecha y hora del gasto
+- Validar entradas del formulario
+- Guardar temporalmente el ultimo gasto en sesion
 
-## Funcionalidades previstas
-- Carga de datos de gastos
-- Preprocesamiento y vectorización
-- Segmentación con K-Means
-- Interpretación de clusters en categorías de gasto
-
-## Limitaciones iniciales
-- Sin lógica de negocio implementada
-- Sin conexión a base de datos
-- Sin backend dedicado
-- Sin modelo entrenado en esta etapa
+## Funcionalidades futuras
+- Preprocesamiento de datos
+- Vectorizacion de gastos
+- K-Means con `K=2`
+- Clasificacion semantica de clusters

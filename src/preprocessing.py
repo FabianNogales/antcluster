@@ -1,4 +1,4 @@
-﻿"""Módulo de preprocesamiento.
+"""Funciones de preprocesamiento para AntCluster."""
 
-Aquí irá la limpieza, transformación y vectorización de datos de gastos.
-"""
+# TODO: Implementar limpieza y transformacion de gastos.
+# TODO: Convertir cada gasto al vector [Monto, Hora, Frecuencia].
