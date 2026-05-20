@@ -1,4 +1,6 @@
-# Pruebas de ejecucion
+# Pruebas de ejecución
+
+## Persona 1 - Interfaz de registro
 
 | Codigo | Descripcion | Entrada | Resultado esperado | Estado |
 |---|---|---|---|---|
@@ -17,3 +19,32 @@
 | P2-004 | Descargar CSV | Pulsar `Descargar CSV` | Se descarga `gastos_usuario.csv` con los gastos actuales | Pendiente |
 | P2-005 | Reiniciar datos | Pulsar `Reiniciar datos` | La tabla queda vacia | Pendiente |
 | P2-006 | Verificar encabezados despues del reinicio | Abrir `data/gastos_usuario.csv` despues de reiniciar | El archivo queda vacio pero conserva `id,nombre,monto,fecha,hora,frecuencia` | Pendiente |
+
+## Persona 3 - Procesamiento y clustering
+
+| Codigo | Descripcion | Entrada | Resultado esperado | Estado |
+|---|---|---|---|---|
+| P3-001 | Cargar dataset demo y procesar | Pulsar `Analizar gastos` con `data/gastos_demo.csv` | El sistema calcula frecuencias mensuales sin errores | Pendiente |
+| P3-002 | Aplicar K-Means | Gastos con 2 clusters identificados | Se muestran dos grupos diferenciados (pequeños y grandes) | Pendiente |
+| P3-003 | Clasificar gastos correctamente | Ejecutar algoritmo completo | Cluster bajo = "Gasto Hormiga", Cluster alto = "Gasto Primario" | Pendiente |
+| P3-004 | Mostrar resumen de presupuesto | Presupuesto: `200 Bs`, Gastos totales: `120 Bs` | Se visualiza: Total gastado, Gastos hormiga, Gastos primarios, Porcentaje | Pendiente |
+| P3-005 | Visualizar grafico de clusters | Ejecutar analisis completo | Se genera grafico scatter con los 2 clusters claramente separados | Pendiente |
+
+## Evidencias Fotográficas
+
+A continuacion se presentan las capturas que demuestran el funcionamiento del sistema:
+
+### 1. Registro de Gastos
+![Registro de gasto](capturas/registro_gasto.png)
+
+*Descripcion*: Interfaz de registro de un nuevo gasto con validaciones correctas.
+
+### 2. Grafico de Clusters
+![Grafico de clusters](capturas/grafico_clusters.png)
+
+*Descripcion*: Visualizacion de los dos clusters identificados por K-Means en el espacio 3D [Monto, Hora, Frecuencia].
+
+### 3. Resumen Final
+![Resumen final](capturas/resumen_final.png)
+
+*Descripcion*: Salida del analisis final mostrando clasificacion de gastos hormiga y primarios con porcentajes respecto al presupuesto.
