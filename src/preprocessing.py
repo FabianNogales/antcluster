@@ -1,84 +1,168 @@
-"""Funciones de preprocesamiento y vectorización para AntCluster."""
+﻿"""Funciones de preprocesamiento y vectorizacion para AntCluster."""
 
-import os
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 
-def calcular_frecuencia_mensual_csv(ruta_entrada: str, ruta_salida: str = None) -> pd.DataFrame:
-    if not os.path.exists(ruta_entrada):
-        print(f"Error: El archivo en {ruta_entrada} no existe.")
-        return None
-        
-    df_gastos = pd.read_csv(ruta_entrada)
-    
-    if df_gastos.empty:
-        return df_gastos
-    df_gastos['timestamp_temporal'] = pd.to_datetime(df_gastos['fecha'] + ' ' + df_gastos['hora'])
-    
-    fecha_maxima = df_gastos['timestamp_temporal'].max()
-    
-    agrupaciones = df_gastos.groupby('nombre').agg(
-        total_compras=('timestamp_temporal', 'count'),
-        primera_compra=('timestamp_temporal', 'min')
-    ).reset_index()
-    
-    agrupaciones['dias_activos'] = (fecha_maxima - agrupaciones['primera_compra']).dt.days + 1
-    
-    agrupaciones['frecuencia_calculada'] = (agrupaciones['total_compras'] / agrupaciones['dias_activos']) * 30
-    agrupaciones['frecuencia_calculada'] = agrupaciones['frecuencia_calculada'].round(2)
-    
-    diccionario_frecuencias = dict(zip(agrupaciones['nombre'], agrupaciones['frecuencia_calculada']))
-    df_gastos['frecuencia'] = df_gastos['nombre'].map(diccionario_frecuencias)
-    
-    df_gastos = df_gastos.drop(columns=['timestamp_temporal'])
-    if ruta_salida:
-        df_gastos.to_csv(ruta_salida, index=False)
-    return df_gastos
 
-def calcularHoraDecimal(horaString):
-    """
-    Convierte una hora en formato 'HH:MM' a un valor numérico decimal.
-    Ejemplo: '14:30' se convierte a 14.5.
-    Si el formato es inválido, retorna 0.0 por seguridad.
-    """
-    if pd.isna(horaString) or not isinstance(horaString, str) or ':' not in horaString:
-        return 0.0
-    
+REQUIRED_COLUMNS = ("nombre", "monto", "fecha", "hora", "frecuencia")
+VECTOR_COLUMNS = ("monto", "horaDecimal", "frecuencia")
+
+
+def _empty_expenses_df() -> pd.DataFrame:
+    """DataFrame vacio con columnas minimas esperadas por la app."""
+    return pd.DataFrame(columns=list(REQUIRED_COLUMNS))
+
+
+def _read_csv_safe(ruta_entrada: str) -> pd.DataFrame:
+    """Lee CSV de forma segura y devuelve DataFrame compatible aunque falle."""
+    path = Path(ruta_entrada)
+    if not path.exists() or path.stat().st_size == 0:
+        return _empty_expenses_df()
+
     try:
-        partesHora = horaString.split(':')
-        horaReal = int(partesHora[0])
-        minutosDecimales = int(partesHora[1]) / 60.0
-        horaDecimal = horaReal + minutosDecimales
-        return round(horaDecimal, 2)
-    except (ValueError, IndexError):
-        return 0.0
+        return pd.read_csv(path)
+    except (pd.errors.EmptyDataError, pd.errors.ParserError, OSError):
+        return _empty_expenses_df()
 
-def vectorizarTransacciones(dfGastos):
+
+def _ensure_required_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Asegura las columnas minimas para preprocesamiento."""
+    normalized = df.copy()
+    for col in REQUIRED_COLUMNS:
+        if col not in normalized.columns:
+            normalized[col] = pd.NA
+    return normalized
+
+
+def calcularHoraDecimal(hora_valor: object) -> float:
     """
-    Recibe un DataFrame de Pandas con los gastos crudos y devuelve la matriz
-    tridimensional [Monto, Hora, Frecuencia] lista para el algoritmo K-Means.
+    Convierte hora a decimal.
+
+    Soporta:
+    - HH:MM
+    - numerico (int/float)
+    - string numerico
+    Retorna NaN si el valor es invalido.
     """
-    if dfGastos.empty:
-        return pd.DataFrame(columns=['monto', 'horaDecimal', 'frecuencia'])
+    if pd.isna(hora_valor):
+        return np.nan
 
-    dfProcesado = dfGastos.copy()
+    if isinstance(hora_valor, (int, float, np.number)):
+        return float(hora_valor)
 
-    dfProcesado['monto'] = pd.to_numeric(dfProcesado['monto'], errors='coerce').fillna(0.0)
-    dfProcesado['horaDecimal'] = dfProcesado['hora'].apply(calcularHoraDecimal)
-    dfProcesado['frecuencia'] = pd.to_numeric(dfProcesado['frecuencia'], errors='coerce').fillna(0).astype(int)
-    
-    matrizVectores = dfProcesado[['monto', 'horaDecimal', 'frecuencia']]
-    
-    return matrizVectores
+    texto = str(hora_valor).strip()
+    if not texto:
+        return np.nan
 
-if __name__ == "__main__":
-    ruta_demo = os.path.join("data", "gastos_demo.csv")
-    ruta_usuario = os.path.join("data", "gastos_usuario.csv")
+    if ":" in texto:
+        try:
+            hora_txt, min_txt = texto.split(":", maxsplit=1)
+            hora_num = int(hora_txt)
+            min_num = int(min_txt)
+            if hora_num < 0 or hora_num > 23 or min_num < 0 or min_num > 59:
+                return np.nan
+            return round(hora_num + (min_num / 60.0), 2)
+        except (ValueError, TypeError):
+            return np.nan
 
-    df_demo_resultado = calcular_frecuencia_mensual_csv(ruta_demo, ruta_salida=ruta_demo)
-    if df_demo_resultado is not None:
-        print(df_demo_resultado[['id', 'nombre', 'monto', 'fecha', 'frecuencia']].to_string(index=False))
-        print("\n--- MATRIZ VECTORIZADA ---")
-        matriz_final = vectorizarTransacciones(df_demo_resultado)
-        print(matriz_final.head())
-        
-    df_usuario_resultado = calcular_frecuencia_mensual_csv(ruta_usuario, ruta_salida=ruta_usuario)
+    try:
+        return float(texto)
+    except ValueError:
+        return np.nan
+
+
+def _calcular_frecuencia_mensual(df: pd.DataFrame) -> pd.Series:
+    """
+    Calcula frecuencia mensual por nombre y mes.
+
+    Si no se puede calcular para una fila (nombre/fecha invalidos), se usa 0.
+    """
+    if df.empty:
+        return pd.Series(dtype="float64")
+
+    nombre = df["nombre"].fillna("").astype(str).str.strip()
+    fechas = pd.to_datetime(df["fecha"], errors="coerce")
+    periodos = fechas.dt.to_period("M")
+
+    freq_df = pd.DataFrame({"nombre": nombre, "periodo": periodos})
+    valid_mask = (freq_df["nombre"] != "") & freq_df["periodo"].notna()
+
+    if not valid_mask.any():
+        return pd.Series(0.0, index=df.index, dtype="float64")
+
+    conteos = (
+        freq_df.loc[valid_mask]
+        .groupby(["nombre", "periodo"], dropna=False)
+        .size()
+        .rename("frecuencia_calculada")
+        .reset_index()
+    )
+
+    merged = freq_df.merge(conteos, on=["nombre", "periodo"], how="left")
+    return merged["frecuencia_calculada"].fillna(0).astype(float)
+
+
+def preparar_datos_para_modelo(df_gastos: pd.DataFrame) -> pd.DataFrame:
+    """
+    Limpia y normaliza datos para consumo de K-Means.
+
+    Produce columnas estables:
+    - monto (float)
+    - horaDecimal (float, NaN si invalida)
+    - frecuencia (float)
+    """
+    if df_gastos is None or df_gastos.empty:
+        base = _empty_expenses_df()
+        base["horaDecimal"] = pd.Series(dtype="float64")
+        return base
+
+    df = _ensure_required_columns(df_gastos)
+
+    df["nombre"] = df["nombre"].fillna("").astype(str).str.strip()
+    df["monto"] = pd.to_numeric(df["monto"], errors="coerce")
+
+    # Priorizar horaDecimal existente; si no existe, usar hora.
+    if "horaDecimal" in df.columns:
+        hora_decimal = pd.to_numeric(df["horaDecimal"], errors="coerce")
+    else:
+        hora_decimal = pd.Series(np.nan, index=df.index, dtype="float64")
+
+    hora_desde_texto = df["hora"].apply(calcularHoraDecimal)
+    df["horaDecimal"] = hora_decimal.fillna(hora_desde_texto)
+
+    # Si no hay frecuencia o viene invalida, se calcula por nombre y mes.
+    frecuencia_existente = pd.to_numeric(df["frecuencia"], errors="coerce")
+    frecuencia_calculada = _calcular_frecuencia_mensual(df)
+    df["frecuencia"] = frecuencia_existente.fillna(frecuencia_calculada)
+    df["frecuencia"] = df["frecuencia"].fillna(0).astype(float)
+
+    return df
+
+
+def calcular_frecuencia_mensual_csv(ruta_entrada: str, ruta_salida: str | None = None) -> pd.DataFrame:
+    """
+    Lee CSV y devuelve un DataFrame procesado sin romper ante datos incompletos.
+    """
+    df_gastos = _read_csv_safe(ruta_entrada)
+    df_procesado = preparar_datos_para_modelo(df_gastos)
+
+    if ruta_salida:
+        Path(ruta_salida).parent.mkdir(parents=True, exist_ok=True)
+        df_procesado.to_csv(ruta_salida, index=False)
+
+    return df_procesado
+
+
+def vectorizarTransacciones(df_gastos: pd.DataFrame) -> pd.DataFrame:
+    """
+    Devuelve matriz [monto, horaDecimal, frecuencia] lista para K-Means.
+    """
+    if df_gastos is None or df_gastos.empty:
+        return pd.DataFrame(columns=list(VECTOR_COLUMNS))
+
+    df_procesado = preparar_datos_para_modelo(df_gastos)
+    return df_procesado.loc[:, list(VECTOR_COLUMNS)].copy()

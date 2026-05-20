@@ -9,7 +9,7 @@ from sklearn.cluster import KMeans
 
 REQUIRED_ALIASES = {
     "monto": ("monto", "Monto"),
-    "hora": ("hora", "horaDecimal", "hora_decimal", "Hora"),
+    "hora": ("horaDecimal", "hora_decimal", "hora", "Hora"),
     "frecuencia": ("frecuencia", "Frecuencia"),
 }
 
