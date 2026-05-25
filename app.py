@@ -3,8 +3,8 @@
 import pandas as pd
 import streamlit as st
 
-from src.classifier import clasificar_y_resumir
-from src.model import aplicar_kmeans
+from src.classifier import clasificar_patrones_avanzados, clasificar_y_resumir
+from src.model import aplicar_kmeans_avanzado
 from src.preprocessing import calcular_frecuencia_mensual_csv, vectorizarTransacciones
 from src.utils import (
     USER_CSV,
@@ -66,59 +66,77 @@ if not expenses.empty:
             for columna in matriz_vectores.columns:
                 df_modelo[columna] = matriz_vectores[columna]
 
-            df_con_clusters, centroides, mensaje_error = aplicar_kmeans(
+            resultados_modelo = aplicar_kmeans_avanzado(
                 df_modelo,
-                n_clusters=2,
+                presupuesto_total=presupuesto_total,
                 random_state=42,
             )
+            
+            df_con_clusters = resultados_modelo.get("df")
+            centroides = resultados_modelo.get("centroides")
+            mensaje_error = resultados_modelo.get("mensaje")
 
             if mensaje_error is None and centroides is not None:
                 st.write("**Resumen Financiero:**")
-                resultado_clasificacion = clasificar_y_resumir(df_con_clusters, presupuesto_total)
+                
+                # obtiene metricas basicas del resumen
+                resultado_basico = clasificar_y_resumir(df_con_clusters, presupuesto_total)
+                
+                # obtiene metricas avanzadas con las 5 variables y heuristica
+                resultado_avanzado = clasificar_patrones_avanzados(df_con_clusters, presupuesto_total)
+                df_visualizacion = resultado_avanzado["df_clasificado"]
 
                 col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Total gastado", f"Bs. {resultado_clasificacion['total_gastado']:.2f}")
-                col2.metric("Gastos Hormiga", f"Bs. {resultado_clasificacion['gastos_hormiga']:.2f}")
-                col3.metric("Gastos Primarios", f"Bs. {resultado_clasificacion['gastos_primarios']:.2f}")
+                col1.metric("Total gastado", f"Bs. {resultado_basico['total_gastado']:.2f}")
+                col2.metric("Gastos Hormiga", f"Bs. {resultado_basico['gastos_hormiga']:.2f}")
+                col3.metric("Gastos Primarios", f"Bs. {resultado_basico['gastos_primarios']:.2f}")
                 col4.metric(
                     "Porcentaje Hormiga",
-                    f"{resultado_clasificacion['porcentaje_hormiga']:.1f}%",
+                    f"{resultado_basico['porcentaje_hormiga']:.1f}%",
                 )
 
-                df_visualizacion = df_con_clusters.copy()
-
-                cluster_hormiga = resultado_clasificacion["cluster_hormiga"]
-
-                def mapear_tipo_gasto(cluster_val):
-                    if pd.isna(cluster_val):
-                        return "Sin clasificar"
-                    if int(cluster_val) == cluster_hormiga:
-                        return "Gasto Hormiga"
-                    return "Gasto Primario"
-
-                df_visualizacion["Tipo"] = df_visualizacion["cluster"].apply(mapear_tipo_gasto)
-
-                columnas_mostrar = ["nombre", "monto", "fecha", "hora", "frecuencia", "Tipo"]
+                # configura las 5 columnas base mas el patron
+                columnas_mostrar = ["nombre", "monto", "fecha", "hora", "frecuencia", "impactoMensual", "porcentajePresupuesto", "categoria_patron"]
                 df_para_mostrar = df_visualizacion[columnas_mostrar]
 
+                # colorea basado en la nueva columna de categoria
                 def colorear_columna_tipo(columna):
                     estilos = []
                     for valor in columna:
-                        if valor == "Gasto Hormiga":
-                            estilos.append("color: #F1C40F; font-weight: bold;")
-                        elif valor == "Gasto Primario":
-                            estilos.append("color: #2ECC71; font-weight: bold;")
+                        if "Hormiga" in str(valor):
+                            estilos.append("color: #f1c40f; font-weight: bold;")
+                        elif "Primario" in str(valor):
+                            estilos.append("color: #2ecc71; font-weight: bold;")
+                        elif "Extraordinario" in str(valor):
+                            estilos.append("color: #e74c3c; font-weight: bold;")
                         else:
                             estilos.append("")
                     return estilos
 
-                st.write("**Tabla Clasificada:**")
+                st.write("**Tabla Clasificada Avanzada:**")
                 st.dataframe(
-                    df_para_mostrar.style.apply(colorear_columna_tipo, subset=["Tipo"], axis=0),
+                    df_para_mostrar.style.apply(colorear_columna_tipo, subset=["categoria_patron"], axis=0),
                     use_container_width=True,
                     hide_index=True,
                 )
-
+                st.divider()
+                
+                # combina diccionarios para no perder contexto en el simulador
+                info_combinada = {**resultado_basico, **resultado_avanzado}
+                
+                # envia variables a la memoria compartida
+                st.session_state["datos_simulador"] = {
+                    "df": df_con_clusters,
+                    "centroides": centroides,
+                    "info": info_combinada,
+                    "mejor_k": resultados_modelo.get("mejor_k"),
+                    "scores": resultados_modelo.get("scores"),
+                    "columnas_features": resultados_modelo.get("columnas_features")
+                }
+                
+                # boton nativo sin emojis
+                if st.button("abrir simulador de caja blanca", use_container_width=True):
+                    st.switch_page("pages/simulador.py")
             else:
                 st.warning("Se necesitan al menos 2 registros v\u00e1lidos para aplicar K-Means.")
         else:
