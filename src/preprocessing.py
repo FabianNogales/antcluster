@@ -10,6 +10,7 @@ import pandas as pd
 
 REQUIRED_COLUMNS = ("nombre", "monto", "fecha", "hora", "frecuencia")
 VECTOR_COLUMNS = ("monto", "horaDecimal", "frecuencia")
+ADVANCED_VECTOR_COLUMNS = ("monto", "horaDecimal", "frecuencia", "impactoMensual", "porcentajePresupuesto")
 
 
 def _empty_expenses_df() -> pd.DataFrame:
@@ -166,3 +167,49 @@ def vectorizarTransacciones(df_gastos: pd.DataFrame) -> pd.DataFrame:
 
     df_procesado = preparar_datos_para_modelo(df_gastos)
     return df_procesado.loc[:, list(VECTOR_COLUMNS)].copy()
+
+
+def preparar_features_avanzadas(
+    df_gastos: pd.DataFrame,
+    presupuesto_total: float = 200.0,
+) -> pd.DataFrame:
+    """
+    Prepara features avanzadas para aprendizaje historico.
+
+    Columnas garantizadas:
+    - nombre
+    - monto
+    - hora
+    - horaDecimal
+    - frecuencia
+    - impactoMensual
+    - porcentajePresupuesto
+    """
+    df_base = preparar_datos_para_modelo(df_gastos)
+
+    if "hora" not in df_base.columns:
+        df_base["hora"] = pd.Series(dtype="object")
+
+    if df_base.empty:
+        empty_df = df_base.copy()
+        empty_df["impactoMensual"] = pd.Series(dtype="float64")
+        empty_df["porcentajePresupuesto"] = pd.Series(dtype="float64")
+        return empty_df
+
+    monto = pd.to_numeric(df_base["monto"], errors="coerce")
+    frecuencia = pd.to_numeric(df_base["frecuencia"], errors="coerce")
+    impacto_mensual = monto * frecuencia
+
+    try:
+        presupuesto = float(presupuesto_total)
+    except (TypeError, ValueError):
+        presupuesto = 200.0
+
+    if not np.isfinite(presupuesto) or presupuesto <= 0:
+        porcentaje = pd.Series(0.0, index=df_base.index, dtype="float64")
+    else:
+        porcentaje = ((impacto_mensual / presupuesto) * 100.0).fillna(0.0)
+
+    df_base["impactoMensual"] = impacto_mensual
+    df_base["porcentajePresupuesto"] = porcentaje.astype(float)
+    return df_base

@@ -9,6 +9,7 @@ import pandas as pd
 from src.preprocessing import (
     calcularHoraDecimal,
     calcular_frecuencia_mensual_csv,
+    preparar_features_avanzadas,
     preparar_datos_para_modelo,
     vectorizarTransacciones,
 )
@@ -106,6 +107,46 @@ class TestPreprocessing(unittest.TestCase):
             self.assertIn("horaDecimal", out.columns)
             self.assertIn("frecuencia", out.columns)
             self.assertEqual(float(out.loc[0, "frecuencia"]), 2.0)
+
+    def test_preparar_features_avanzadas_calcula_impacto_y_porcentaje(self) -> None:
+        df = pd.DataFrame(
+            {
+                "nombre": ["Cafe", "Snack"],
+                "monto": [5, 8],
+                "fecha": ["2026-05-01", "2026-05-02"],
+                "hora": ["10:00", "16:30"],
+                "frecuencia": [2, 3],
+            }
+        )
+
+        out = preparar_features_avanzadas(df, presupuesto_total=200.0)
+        self.assertIn("impactoMensual", out.columns)
+        self.assertIn("porcentajePresupuesto", out.columns)
+        self.assertEqual(float(out.loc[0, "impactoMensual"]), 10.0)
+        self.assertEqual(float(out.loc[1, "impactoMensual"]), 24.0)
+        self.assertAlmostEqual(float(out.loc[0, "porcentajePresupuesto"]), 5.0, places=6)
+        self.assertAlmostEqual(float(out.loc[1, "porcentajePresupuesto"]), 12.0, places=6)
+
+    def test_preparar_features_avanzadas_presupuesto_cero_no_rompe(self) -> None:
+        df = pd.DataFrame(
+            {
+                "nombre": ["Cafe"],
+                "monto": [5],
+                "fecha": ["2026-05-01"],
+                "hora": ["10:00"],
+                "frecuencia": [2],
+            }
+        )
+
+        out = preparar_features_avanzadas(df, presupuesto_total=0)
+        self.assertEqual(float(out.loc[0, "porcentajePresupuesto"]), 0.0)
+
+    def test_preparar_features_avanzadas_dataframe_vacio(self) -> None:
+        df = pd.DataFrame(columns=["nombre", "monto", "fecha", "hora", "frecuencia"])
+        out = preparar_features_avanzadas(df)
+        self.assertTrue(out.empty)
+        self.assertIn("impactoMensual", out.columns)
+        self.assertIn("porcentajePresupuesto", out.columns)
 
 
 if __name__ == "__main__":
