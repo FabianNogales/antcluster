@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
 
 from src.preprocessing import preparar_features_avanzadas
+
+logger = logging.getLogger(__name__)
 
 
 def clasificar_y_resumir(df_gastos: pd.DataFrame, presupuesto_total: float) -> dict:
@@ -39,10 +43,13 @@ def clasificar_y_resumir(df_gastos: pd.DataFrame, presupuesto_total: float) -> d
 
     porcentaje_hormiga = (total_hormiga / presupuesto_total * 100) if presupuesto_total > 0 else 0
 
-    print(f"Total gastado: {total_gastado:.0f} Bs")
-    print(f"Gastos hormiga: {total_hormiga:.0f} Bs")
-    print(f"Gastos primarios: {total_primario:.0f} Bs")
-    print(f"Porcentaje en gastos hormiga: {porcentaje_hormiga:.1f}%")
+    logger.debug(
+        "Resumen clasificar_y_resumir total=%.2f hormiga=%.2f primario=%.2f porcentaje_hormiga=%.2f",
+        total_gastado,
+        total_hormiga,
+        total_primario,
+        porcentaje_hormiga,
+    )
 
     return {
         "total_gastado": total_gastado,
@@ -82,29 +89,36 @@ def _clasificar_fila_patron(
     porcentaje = float(row.get("porcentajePresupuesto", 0.0))
 
     monto_bajo = umbrales["monto_bajo"]
-    monto_alto = umbrales["monto_alto"]
+    monto_primario = umbrales["monto_primario"]
+    monto_extraordinario = umbrales["monto_extraordinario"]
     freq_baja = umbrales["freq_baja"]
+    freq_repetida = umbrales["freq_repetida"]
     freq_alta = umbrales["freq_alta"]
-    impacto_bajo = umbrales["impacto_bajo"]
-    impacto_alto = umbrales["impacto_alto"]
-    porcentaje_alto = umbrales["porcentaje_alto"]
+    impacto_recurrente = umbrales["impacto_recurrente"]
+    impacto_primario = umbrales["impacto_primario"]
+    porcentaje_primario = umbrales["porcentaje_primario"]
 
-    if monto >= monto_alto and frecuencia <= freq_baja:
+    # Evento de monto alto y baja frecuencia: gasto no recurrente.
+    if monto >= monto_extraordinario and frecuencia <= freq_baja:
         return "Gasto Extraordinario"
 
-    if frecuencia >= freq_alta and (impacto >= impacto_bajo or porcentaje >= (porcentaje_alto * 0.6)):
-        return "Gasto Hormiga Recurrente"
-
-    if impacto >= impacto_alto or porcentaje >= porcentaje_alto:
+    # Gasto base de vida/recurrente con impacto mensual alto.
+    if monto >= monto_primario and frecuencia >= freq_repetida and (
+        impacto >= impacto_primario or porcentaje >= porcentaje_primario
+    ):
         return "Gasto Primario"
 
-    if monto <= monto_bajo and frecuencia <= freq_baja and impacto <= impacto_bajo:
+    # Monto bajo/medio frecuente que se acumula en el mes.
+    if monto < monto_primario and frecuencia >= freq_alta and impacto >= impacto_recurrente:
+        return "Gasto Hormiga Recurrente"
+
+    if monto <= monto_bajo and frecuencia <= freq_baja and impacto <= impacto_recurrente:
         return "Gasto Hormiga Ocasional"
 
     if frecuencia >= freq_alta:
         return "Gasto Hormiga Recurrente"
 
-    if impacto >= impacto_alto:
+    if impacto >= impacto_primario and monto >= monto_primario:
         return "Gasto Primario"
 
     return "Gasto Hormiga Ocasional"
@@ -138,13 +152,15 @@ def clasificar_patrones_avanzados(
     base["porcentajePresupuesto"] = pd.to_numeric(base["porcentajePresupuesto"], errors="coerce").fillna(0.0)
 
     umbrales = {
-        "monto_bajo": _threshold(base["monto"], 0.40),
-        "monto_alto": _threshold(base["monto"], 0.75),
-        "freq_baja": _threshold(base["frecuencia"], 0.35),
-        "freq_alta": _threshold(base["frecuencia"], 0.70),
-        "impacto_bajo": _threshold(base["impactoMensual"], 0.35),
-        "impacto_alto": _threshold(base["impactoMensual"], 0.75),
-        "porcentaje_alto": max(_threshold(base["porcentajePresupuesto"], 0.75), 5.0),
+        "monto_bajo": max(_threshold(base["monto"], 0.35), 8.0),
+        "monto_primario": max(_threshold(base["monto"], 0.55), 12.0),
+        "monto_extraordinario": max(_threshold(base["monto"], 0.80), 25.0),
+        "freq_baja": min(max(_threshold(base["frecuencia"], 0.30), 1.0), 2.0),
+        "freq_repetida": max(_threshold(base["frecuencia"], 0.50), 3.0),
+        "freq_alta": max(_threshold(base["frecuencia"], 0.70), 4.0),
+        "impacto_recurrente": max(_threshold(base["impactoMensual"], 0.45), 20.0),
+        "impacto_primario": max(_threshold(base["impactoMensual"], 0.75), 60.0),
+        "porcentaje_primario": max(_threshold(base["porcentajePresupuesto"], 0.75), 12.0),
     }
 
     base["categoria_patron"] = base.apply(_clasificar_fila_patron, axis=1, umbrales=umbrales)
@@ -166,4 +182,44 @@ def clasificar_patrones_avanzados(
         "resumen_categorias": resumen_categorias,
         "resumen_por_cluster": resumen_cluster,
         "umbrales": umbrales,
+    }
+
+
+def resumir_finanzas_avanzadas(
+    df_clasificado: pd.DataFrame,
+    presupuesto_total: float = 200.0,
+) -> dict:
+    """
+    Resume el resultado financiero usando la categoria avanzada.
+    """
+    if df_clasificado is None or df_clasificado.empty:
+        raise ValueError("El DataFrame clasificado no puede estar vacio")
+
+    if "monto" not in df_clasificado.columns:
+        raise ValueError("El DataFrame debe contener una columna 'monto'")
+
+    if "categoria_patron" not in df_clasificado.columns:
+        raise ValueError("El DataFrame debe contener una columna 'categoria_patron'")
+
+    presupuesto = _safe_budget(presupuesto_total)
+
+    monto = pd.to_numeric(df_clasificado["monto"], errors="coerce").fillna(0.0)
+    categoria = df_clasificado["categoria_patron"].fillna("").astype(str)
+
+    mask_hormiga = categoria.str.contains("Hormiga", case=False, na=False)
+    mask_primario = categoria == "Gasto Primario"
+    mask_extraordinario = categoria == "Gasto Extraordinario"
+
+    total_gastado = float(monto.sum())
+    gastos_hormiga = float(monto[mask_hormiga].sum())
+    gastos_primarios = float(monto[mask_primario].sum())
+    gastos_extraordinarios = float(monto[mask_extraordinario].sum())
+    porcentaje_hormiga = float((gastos_hormiga / presupuesto) * 100.0) if presupuesto > 0 else 0.0
+
+    return {
+        "total_gastado": total_gastado,
+        "gastos_hormiga": gastos_hormiga,
+        "gastos_primarios": gastos_primarios,
+        "gastos_extraordinarios": gastos_extraordinarios,
+        "porcentaje_hormiga": porcentaje_hormiga,
     }

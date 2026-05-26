@@ -76,35 +76,51 @@ def calcularHoraDecimal(hora_valor: object) -> float:
         return np.nan
 
 
-def _calcular_frecuencia_mensual(df: pd.DataFrame) -> pd.Series:
+def calcular_frecuencia_mensual_oficial(df: pd.DataFrame) -> pd.Series:
     """
-    Calcula frecuencia mensual por nombre y mes.
-
-    Si no se puede calcular para una fila (nombre/fecha invalidos), se usa 0.
+    Fuente oficial de frecuencia:
+    - Si hay fecha valida: conteo por (nombre, mes).
+    - Si falta fecha: usa frecuencia existente si es valida.
+    - Si tampoco hay frecuencia valida: fallback controlado por conteo de nombre.
     """
     if df.empty:
         return pd.Series(dtype="float64")
 
     nombre = df["nombre"].fillna("").astype(str).str.strip()
-    fechas = pd.to_datetime(df["fecha"], errors="coerce")
+
+    if "fecha" in df.columns:
+        fechas = pd.to_datetime(df["fecha"], errors="coerce")
+    else:
+        fechas = pd.Series(pd.NaT, index=df.index)
     periodos = fechas.dt.to_period("M")
 
-    freq_df = pd.DataFrame({"nombre": nombre, "periodo": periodos})
-    valid_mask = (freq_df["nombre"] != "") & freq_df["periodo"].notna()
+    frecuencia = pd.Series(np.nan, index=df.index, dtype="float64")
+    valid_month = (nombre != "") & periodos.notna()
 
-    if not valid_mask.any():
-        return pd.Series(0.0, index=df.index, dtype="float64")
+    if valid_month.any():
+        month_counts = (
+            pd.DataFrame({"nombre": nombre, "periodo": periodos}, index=df.index)
+            .loc[valid_month]
+            .groupby(["nombre", "periodo"])["nombre"]
+            .transform("size")
+            .astype(float)
+        )
+        frecuencia.loc[valid_month] = month_counts
 
-    conteos = (
-        freq_df.loc[valid_mask]
-        .groupby(["nombre", "periodo"], dropna=False)
-        .size()
-        .rename("frecuencia_calculada")
-        .reset_index()
-    )
+    fallback_mask = frecuencia.isna() & (nombre != "")
+    if fallback_mask.any():
+        if "frecuencia" in df.columns:
+            frecuencia_existente = pd.to_numeric(df["frecuencia"], errors="coerce")
+            frecuencia.loc[fallback_mask] = frecuencia_existente.loc[fallback_mask]
 
-    merged = freq_df.merge(conteos, on=["nombre", "periodo"], how="left")
-    return merged["frecuencia_calculada"].fillna(0).astype(float)
+    unresolved_mask = frecuencia.isna() & (nombre != "")
+    if unresolved_mask.any():
+        fallback_counts = nombre.loc[unresolved_mask].value_counts()
+        frecuencia.loc[unresolved_mask] = (
+            nombre.loc[unresolved_mask].map(fallback_counts).astype(float)
+        )
+
+    return frecuencia.fillna(0.0).astype(float)
 
 
 def preparar_datos_para_modelo(df_gastos: pd.DataFrame) -> pd.DataFrame:
@@ -135,11 +151,8 @@ def preparar_datos_para_modelo(df_gastos: pd.DataFrame) -> pd.DataFrame:
     hora_desde_texto = df["hora"].apply(calcularHoraDecimal)
     df["horaDecimal"] = hora_decimal.fillna(hora_desde_texto)
 
-    # Si no hay frecuencia o viene invalida, se calcula por nombre y mes.
-    frecuencia_existente = pd.to_numeric(df["frecuencia"], errors="coerce")
-    frecuencia_calculada = _calcular_frecuencia_mensual(df)
-    df["frecuencia"] = frecuencia_existente.fillna(frecuencia_calculada)
-    df["frecuencia"] = df["frecuencia"].fillna(0).astype(float)
+    # Fuente oficial de frecuencia para todo el sistema.
+    df["frecuencia"] = calcular_frecuencia_mensual_oficial(df)
 
     return df
 

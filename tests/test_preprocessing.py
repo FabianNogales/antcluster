@@ -122,10 +122,12 @@ class TestPreprocessing(unittest.TestCase):
         out = preparar_features_avanzadas(df, presupuesto_total=200.0)
         self.assertIn("impactoMensual", out.columns)
         self.assertIn("porcentajePresupuesto", out.columns)
-        self.assertEqual(float(out.loc[0, "impactoMensual"]), 10.0)
-        self.assertEqual(float(out.loc[1, "impactoMensual"]), 24.0)
-        self.assertAlmostEqual(float(out.loc[0, "porcentajePresupuesto"]), 5.0, places=6)
-        self.assertAlmostEqual(float(out.loc[1, "porcentajePresupuesto"]), 12.0, places=6)
+        # La fuente oficial usa frecuencia mensual por (nombre, mes).
+        # En este caso hay 1 registro por nombre dentro del mismo mes.
+        self.assertEqual(float(out.loc[0, "impactoMensual"]), 5.0)
+        self.assertEqual(float(out.loc[1, "impactoMensual"]), 8.0)
+        self.assertAlmostEqual(float(out.loc[0, "porcentajePresupuesto"]), 2.5, places=6)
+        self.assertAlmostEqual(float(out.loc[1, "porcentajePresupuesto"]), 4.0, places=6)
 
     def test_preparar_features_avanzadas_presupuesto_cero_no_rompe(self) -> None:
         df = pd.DataFrame(

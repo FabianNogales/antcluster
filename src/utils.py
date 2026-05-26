@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.preprocessing import calcular_frecuencia_mensual_oficial
+
 
 OFFICIAL_COLUMNS = ["id", "nombre", "monto", "fecha", "hora", "frecuencia"]
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -147,13 +149,13 @@ def read_expenses() -> pd.DataFrame:
 
 
 def recalculate_frequencies(df: pd.DataFrame) -> pd.DataFrame:
-    """Actualiza frecuencia contando repeticiones del mismo nombre."""
+    """Actualiza frecuencia usando la fuente oficial mensual del sistema."""
     normalized = _normalize_expenses_df(df)
     if normalized.empty:
         return normalized
 
-    counts = normalized["nombre"].value_counts()
-    normalized["frecuencia"] = normalized["nombre"].map(counts).fillna(0).astype(int)
+    frecuencia = calcular_frecuencia_mensual_oficial(normalized)
+    normalized["frecuencia"] = pd.to_numeric(frecuencia, errors="coerce").fillna(0).astype(int)
     return normalized
 
 
