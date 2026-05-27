@@ -11,6 +11,7 @@ import pandas as pd
 REQUIRED_COLUMNS = ("nombre", "monto", "fecha", "hora", "frecuencia")
 VECTOR_COLUMNS = ("monto", "horaDecimal", "frecuencia")
 ADVANCED_VECTOR_COLUMNS = ("monto", "horaDecimal", "frecuencia", "impactoMensual", "porcentajePresupuesto")
+DEFAULT_PRESUPUESTO_TOTAL = 500.0
 
 
 def _empty_expenses_df() -> pd.DataFrame:
@@ -182,9 +183,27 @@ def vectorizarTransacciones(df_gastos: pd.DataFrame) -> pd.DataFrame:
     return df_procesado.loc[:, list(VECTOR_COLUMNS)].copy()
 
 
+def normalizar_presupuesto_total(
+    presupuesto_total: float | int | str | None,
+    fallback: float = DEFAULT_PRESUPUESTO_TOTAL,
+    allow_non_positive: bool = False,
+) -> float:
+    """Normaliza presupuesto total para calculos financieros."""
+    try:
+        presupuesto = float(presupuesto_total)
+    except (TypeError, ValueError):
+        return float(fallback)
+
+    if not np.isfinite(presupuesto):
+        return float(fallback)
+    if presupuesto <= 0:
+        return float(presupuesto) if allow_non_positive else float(fallback)
+    return float(presupuesto)
+
+
 def preparar_features_avanzadas(
     df_gastos: pd.DataFrame,
-    presupuesto_total: float = 200.0,
+    presupuesto_total: float = DEFAULT_PRESUPUESTO_TOTAL,
 ) -> pd.DataFrame:
     """
     Prepara features avanzadas para aprendizaje historico.
@@ -213,10 +232,11 @@ def preparar_features_avanzadas(
     frecuencia = pd.to_numeric(df_base["frecuencia"], errors="coerce")
     impacto_mensual = monto * frecuencia
 
-    try:
-        presupuesto = float(presupuesto_total)
-    except (TypeError, ValueError):
-        presupuesto = 200.0
+    presupuesto = normalizar_presupuesto_total(
+        presupuesto_total,
+        fallback=DEFAULT_PRESUPUESTO_TOTAL,
+        allow_non_positive=True,
+    )
 
     if not np.isfinite(presupuesto) or presupuesto <= 0:
         porcentaje = pd.Series(0.0, index=df_base.index, dtype="float64")

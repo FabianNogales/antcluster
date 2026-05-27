@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import logging
 
-import numpy as np
 import pandas as pd
 
-from src.preprocessing import preparar_features_avanzadas
+from src.preprocessing import (
+    DEFAULT_PRESUPUESTO_TOTAL,
+    normalizar_presupuesto_total,
+    preparar_features_avanzadas,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +66,11 @@ def clasificar_y_resumir(df_gastos: pd.DataFrame, presupuesto_total: float) -> d
 
 
 def _safe_budget(presupuesto_total: float) -> float:
-    try:
-        presupuesto = float(presupuesto_total)
-    except (TypeError, ValueError):
-        return 200.0
-    if not np.isfinite(presupuesto) or presupuesto <= 0:
-        return 200.0
-    return presupuesto
+    return normalizar_presupuesto_total(
+        presupuesto_total,
+        fallback=DEFAULT_PRESUPUESTO_TOTAL,
+        allow_non_positive=True,
+    )
 
 
 def _threshold(series: pd.Series, q: float) -> float:
@@ -126,7 +127,7 @@ def _clasificar_fila_patron(
 
 def clasificar_patrones_avanzados(
     df: pd.DataFrame,
-    presupuesto_total: float = 200.0,
+    presupuesto_total: float = DEFAULT_PRESUPUESTO_TOTAL,
 ) -> dict:
     """
     Clasifica patrones avanzados de consumo.
@@ -187,7 +188,7 @@ def clasificar_patrones_avanzados(
 
 def resumir_finanzas_avanzadas(
     df_clasificado: pd.DataFrame,
-    presupuesto_total: float = 200.0,
+    presupuesto_total: float = DEFAULT_PRESUPUESTO_TOTAL,
 ) -> dict:
     """
     Resume el resultado financiero usando la categoria avanzada.

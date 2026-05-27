@@ -12,7 +12,11 @@ import pandas as pd
 
 from src.classifier import clasificar_patrones_avanzados, resumir_finanzas_avanzadas
 from src.model import aplicar_kmeans_avanzado, calcular_distancias_a_centroides
-from src.preprocessing import calcularHoraDecimal
+from src.preprocessing import (
+    DEFAULT_PRESUPUESTO_TOTAL,
+    calcularHoraDecimal,
+    normalizar_presupuesto_total,
+)
 from src.utils import DATA_DIR, OFFICIAL_COLUMNS, recalculate_frequencies
 
 HISTORICO_CSV = DATA_DIR / "gastos_historicos.csv"
@@ -126,15 +130,20 @@ def guardar_gastos_historicos(df: pd.DataFrame) -> None:
 
 def entrenar_agente_historico(
     df_historico: pd.DataFrame,
-    presupuesto_total: float = 500.0,
+    presupuesto_total: float = DEFAULT_PRESUPUESTO_TOTAL,
 ) -> dict[str, Any]:
     if df_historico is None or df_historico.empty:
         modelo = _modelo_no_entrenado()
         modelo["resumen_entrenamiento"] = {"mensaje": "No hay datos historicos para entrenar."}
         return modelo
 
+    presupuesto = normalizar_presupuesto_total(
+        presupuesto_total,
+        fallback=DEFAULT_PRESUPUESTO_TOTAL,
+        allow_non_positive=True,
+    )
     df_base = _coerce_historico_df(df_historico)
-    out = aplicar_kmeans_avanzado(df_base, presupuesto_total=presupuesto_total, random_state=42)
+    out = aplicar_kmeans_avanzado(df_base, presupuesto_total=presupuesto, random_state=42)
 
     df_cluster = out.get("df", pd.DataFrame())
     centroides = out.get("centroides")
@@ -147,7 +156,7 @@ def entrenar_agente_historico(
         "entrenado": False,
         "fecha_entrenamiento": datetime.now().isoformat(timespec="seconds"),
         "cantidad_registros": int(len(df_base)),
-        "presupuesto_total": float(presupuesto_total),
+        "presupuesto_total": float(presupuesto),
         "columnas_features": list(columnas_features),
         "mejor_k": int(mejor_k) if mejor_k is not None else None,
         "scores_silhouette": [],
@@ -168,9 +177,9 @@ def entrenar_agente_historico(
     centroides_np = np.asarray(centroides, dtype=float)
     modelo["centroides"] = centroides_np.tolist()
 
-    clasificado = clasificar_patrones_avanzados(df_cluster, presupuesto_total=presupuesto_total)
+    clasificado = clasificar_patrones_avanzados(df_cluster, presupuesto_total=presupuesto)
     df_clasificado = clasificado["df_clasificado"]
-    resumen = resumir_finanzas_avanzadas(df_clasificado, presupuesto_total=presupuesto_total)
+    resumen = resumir_finanzas_avanzadas(df_clasificado, presupuesto_total=presupuesto)
 
     categorias_por_cluster: dict[str, str] = {}
     grouped = (
@@ -222,7 +231,7 @@ def cargar_modelo_historico() -> dict[str, Any]:
 def clasificar_gasto_con_modelo_historico(
     gasto: dict[str, Any],
     modelo_historico: dict[str, Any],
-    presupuesto_total: float = 500.0,
+    presupuesto_total: float = DEFAULT_PRESUPUESTO_TOTAL,
 ) -> dict[str, Any]:
     if not modelo_historico or not modelo_historico.get("centroides"):
         raise ValueError("No hay centroides historicos disponibles. Entrena el modelo primero.")
@@ -255,10 +264,16 @@ def clasificar_gasto_con_modelo_historico(
         raise ValueError("La hora del nuevo gasto no es valida. Usa formato HH:MM.")
 
     impacto_mensual = float(monto * frecuencia)
+    presupuesto = normalizar_presupuesto_total(
+        presupuesto_total,
+        fallback=DEFAULT_PRESUPUESTO_TOTAL,
+        allow_non_positive=True,
+    )
+    presupuesto_modelo_raw = modelo_historico.get("presupuesto_total", None)
     try:
-        presupuesto = float(presupuesto_total)
+        presupuesto_modelo = float(presupuesto_modelo_raw) if presupuesto_modelo_raw is not None else None
     except (TypeError, ValueError):
-        presupuesto = 500.0
+        presupuesto_modelo = None
     if not np.isfinite(presupuesto) or presupuesto <= 0:
         porcentaje_presupuesto = 0.0
     else:
@@ -287,13 +302,21 @@ def clasificar_gasto_con_modelo_historico(
     explicacion = (
         f"El gasto '{nombre}' fue proyectado al vector avanzado y comparado contra centroides "
         f"historicos. Se asigno al cluster {cluster_asignado} por menor distancia euclidiana "
-        f"({dist_min:.4f}). Categoria estimada: {categoria}."
+        f"({dist_min:.4f}). Categoria estimada: {categoria}. "
+        f"Presupuesto usado para clasificar: {presupuesto:.2f} Bs."
     )
+    if presupuesto_modelo is not None:
+        explicacion = (
+            f"{explicacion} Presupuesto registrado en entrenamiento historico: "
+            f"{presupuesto_modelo:.2f} Bs."
+        )
 
     return {
         "vector_generado": {col: float(feature_map[col]) for col in columnas},
         "cluster_asignado": cluster_asignado,
         "distancias_centroides": distancias_df.to_dict(orient="records"),
         "categoria_interpretada": categoria,
+        "presupuesto_clasificacion": float(presupuesto),
+        "presupuesto_modelo_entrenado": presupuesto_modelo,
         "explicacion": explicacion,
     }

@@ -6,8 +6,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from scipy import stats
 
-from src.model import calcular_distancias_a_centroides
 from src.classifier import clasificar_patrones_avanzados
+from src.model import calcular_distancias_a_centroides
+from src.preprocessing import DEFAULT_PRESUPUESTO_TOTAL, normalizar_presupuesto_total
 
 def _obtener_nombre_cluster(cluster_id: int, info: dict, df: pd.DataFrame) -> str:
     if info.get("cluster_hormiga") == cluster_id:
@@ -109,12 +110,20 @@ def _renderizar_glosario():
         """)
 
 def renderizar_simulador_completo(datos_modelo: dict):
+    presupuesto_base = normalizar_presupuesto_total(
+        st.session_state.get("presupuesto_total", datos_modelo.get("presupuesto_total", DEFAULT_PRESUPUESTO_TOTAL)),
+        fallback=DEFAULT_PRESUPUESTO_TOTAL,
+        allow_non_positive=True,
+    )
+
     # estado de presupuesto
     if "presupuesto_auditoria" not in st.session_state:
-        st.session_state["presupuesto_auditoria"] = 200.0
-    
+        st.session_state["presupuesto_auditoria"] = float(presupuesto_base)
+    valor_inicial_slider = float(st.session_state["presupuesto_auditoria"])
+    valor_inicial_slider = min(max(valor_inicial_slider, 50.0), 1000.0)
+
     st.markdown("### Análisis de sensibilidad")
-    nuevo_presupuesto = st.slider("Ajuste de presupuesto total", 50.0, 1000.0, st.session_state["presupuesto_auditoria"])
+    nuevo_presupuesto = st.slider("Ajuste de presupuesto total", 50.0, 1000.0, valor_inicial_slider)
     st.session_state["presupuesto_auditoria"] = nuevo_presupuesto
     
     df_raw = datos_modelo.get("df")
@@ -167,3 +176,5 @@ def renderizar_simulador_completo(datos_modelo: dict):
         nombre = st.selectbox("Directorio de gastos", options=df_unicos["nombre"].tolist())
         registro = df_unicos[df_unicos["nombre"] == nombre].iloc[0]
         _renderizar_vista_nodo(registro, centroides, columnas, info_avanzada, df)
+
+

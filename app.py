@@ -13,7 +13,12 @@ from src.historico import (
     inicializar_archivos_historicos,
 )
 from src.model import aplicar_kmeans_avanzado
-from src.preprocessing import calcular_frecuencia_mensual_csv, vectorizarTransacciones
+from src.preprocessing import (
+    DEFAULT_PRESUPUESTO_TOTAL,
+    calcular_frecuencia_mensual_csv,
+    normalizar_presupuesto_total,
+    vectorizarTransacciones,
+)
 from src.utils import (
     USER_CSV,
     get_expenses_summary,
@@ -57,13 +62,22 @@ st.dataframe(expenses, width="stretch", hide_index=True)
 st.divider()
 st.subheader("Analisis de Gastos con K-Means")
 
+if "presupuesto_total" not in st.session_state:
+    st.session_state["presupuesto_total"] = float(DEFAULT_PRESUPUESTO_TOTAL)
+
+presupuesto_ui = normalizar_presupuesto_total(
+    st.session_state.get("presupuesto_total"),
+    fallback=DEFAULT_PRESUPUESTO_TOTAL,
+    allow_non_positive=True,
+)
 presupuesto_total = st.sidebar.number_input(
     "Presupuesto total (Bs)",
     min_value=0.0,
-    value=500.0,
+    value=float(presupuesto_ui),
     step=10.0,
     format="%.2f",
 )
+st.session_state["presupuesto_total"] = float(presupuesto_total)
 
 if not expenses.empty:
     try:
@@ -159,7 +173,8 @@ if not expenses.empty:
                     "info": info_combinada,
                     "mejor_k": resultados_modelo.get("mejor_k"),
                     "scores": resultados_modelo.get("scores"),
-                    "columnas_features": resultados_modelo.get("columnas_features")
+                    "columnas_features": resultados_modelo.get("columnas_features"),
+                    "presupuesto_total": float(presupuesto_total),
                 }
                 
                 # boton nativo sin emojis
@@ -199,10 +214,15 @@ if st.button("Entrenar agente histórico", use_container_width=True):
 
 if modelo_historico.get("entrenado"):
     st.write("**Resumen del entrenamiento histórico:**")
-    col_h1, col_h2, col_h3 = st.columns(3)
+    col_h1, col_h2, col_h3, col_h4 = st.columns(4)
     col_h1.metric("Fecha entrenamiento", str(modelo_historico.get("fecha_entrenamiento") or "-"))
     col_h2.metric("Registros usados", int(modelo_historico.get("cantidad_registros") or 0))
     col_h3.metric("Mejor K histórico", int(modelo_historico.get("mejor_k") or 0))
+    presupuesto_entrenamiento = modelo_historico.get("presupuesto_total", None)
+    if presupuesto_entrenamiento is None:
+        col_h4.metric("Presupuesto entrenamiento", "-")
+    else:
+        col_h4.metric("Presupuesto entrenamiento", f"Bs. {float(presupuesto_entrenamiento):.2f}")
 
     centroides_hist = modelo_historico.get("centroides", [])
     columnas_hist = modelo_historico.get("columnas_features", [])
@@ -227,6 +247,13 @@ if modelo_historico.get("entrenado"):
 
     with st.form("formulario_clasificacion_historica"):
         st.write("Clasificar nuevo gasto con centroides históricos")
+        if presupuesto_entrenamiento is None:
+            st.caption(f"Presupuesto usado para clasificar ahora: Bs. {float(presupuesto_total):.2f}")
+        else:
+            st.caption(
+                f"Presupuesto actual (clasificación): Bs. {float(presupuesto_total):.2f} | "
+                f"Presupuesto del entrenamiento histórico: Bs. {float(presupuesto_entrenamiento):.2f}"
+            )
         nombre_h = st.text_input("Nombre nuevo gasto", value="Gasto nuevo")
         monto_h = st.number_input("Monto nuevo gasto", min_value=0.0, step=0.5, format="%.2f")
         fecha_h = st.date_input("Fecha nuevo gasto")
@@ -251,6 +278,16 @@ if modelo_historico.get("entrenado"):
             st.write(f"Cluster asignado: **{resultado_hist['cluster_asignado']}**")
             st.write(f"Categoría interpretada: **{resultado_hist['categoria_interpretada']}**")
             st.write(resultado_hist["explicacion"])
+            presupuesto_entrenado = resultado_hist["presupuesto_modelo_entrenado"]
+            presupuesto_entrenado_texto = (
+                "-"
+                if presupuesto_entrenado is None
+                else f"Bs. {float(presupuesto_entrenado):.2f}"
+            )
+            st.caption(
+                f"Presupuesto clasificación: Bs. {float(resultado_hist['presupuesto_clasificacion']):.2f} | "
+                f"Presupuesto entrenamiento: {presupuesto_entrenado_texto}"
+            )
             st.write("Vector generado")
             st.json(resultado_hist["vector_generado"])
             st.write("Distancias a centroides")

@@ -219,6 +219,31 @@ class TestHistorico(unittest.TestCase):
         self.assertAlmostEqual(out["vector_generado"]["impactoMensual"], 18.0, places=6)
         self.assertAlmostEqual(out["vector_generado"]["porcentajePresupuesto"], 3.6, places=6)
 
+    def test_clasificar_historico_respeta_presupuesto_recibido(self) -> None:
+        modelo = {
+            "presupuesto_total": 500.0,
+            "centroides": [[18.0, 12.67, 1.0, 18.0, 3.6]],
+            "columnas_features": ["monto", "horaDecimal", "frecuencia", "impactoMensual", "porcentajePresupuesto"],
+            "categorias_por_cluster": {"0": "Gasto Hormiga Ocasional"},
+        }
+
+        out_500 = clasificar_gasto_con_modelo_historico(
+            {"nombre": "Almuerzo", "monto": 18.0, "hora": "12:40", "frecuencia": 1},
+            modelo_historico=modelo,
+            presupuesto_total=500.0,
+        )
+        out_1000 = clasificar_gasto_con_modelo_historico(
+            {"nombre": "Almuerzo", "monto": 18.0, "hora": "12:40", "frecuencia": 1},
+            modelo_historico=modelo,
+            presupuesto_total=1000.0,
+        )
+
+        self.assertAlmostEqual(out_500["vector_generado"]["porcentajePresupuesto"], 3.6, places=6)
+        self.assertAlmostEqual(out_1000["vector_generado"]["porcentajePresupuesto"], 1.8, places=6)
+        self.assertAlmostEqual(out_500["presupuesto_clasificacion"], 500.0, places=6)
+        self.assertAlmostEqual(out_1000["presupuesto_clasificacion"], 1000.0, places=6)
+        self.assertAlmostEqual(out_500["presupuesto_modelo_entrenado"], 500.0, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

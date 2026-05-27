@@ -8,6 +8,12 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
+from src.preprocessing import (
+    DEFAULT_PRESUPUESTO_TOTAL,
+    normalizar_presupuesto_total,
+    preparar_features_avanzadas,
+)
+
 
 REQUIRED_ALIASES = {
     "monto": ("monto", "Monto"),
@@ -280,7 +286,7 @@ def aplicar_kmeans(
 
 def aplicar_kmeans_avanzado(
     df: pd.DataFrame,
-    presupuesto_total: float = 200.0,
+    presupuesto_total: float = DEFAULT_PRESUPUESTO_TOTAL,
     k_min: int = 2,
     k_max: int = 5,
     random_state: int = 42,
@@ -294,9 +300,12 @@ def aplicar_kmeans_avanzado(
     if df is None:
         raise ValueError("El DataFrame no puede ser None.")
 
-    from src.preprocessing import preparar_features_avanzadas
-
-    df_features = preparar_features_avanzadas(df, presupuesto_total=presupuesto_total)
+    presupuesto = normalizar_presupuesto_total(
+        presupuesto_total,
+        fallback=DEFAULT_PRESUPUESTO_TOTAL,
+        allow_non_positive=True,
+    )
+    df_features = preparar_features_avanzadas(df, presupuesto_total=presupuesto)
     columnas = [col for col in DEFAULT_ADVANCED_COLUMNS if col in df_features.columns]
 
     if len(columnas) < 3:
