@@ -1,5 +1,6 @@
 ﻿"""Interfaz principal para la gestion de datos de AntCluster."""
 
+import pandas as pd
 import streamlit as st
 
 from src.classifier import clasificar_patrones_avanzados, resumir_finanzas_avanzadas
@@ -84,8 +85,12 @@ if not expenses.empty:
         df_procesado = calcular_frecuencia_mensual_csv(str(USER_CSV))
 
         if not df_procesado.empty:
-            matriz_vectores = vectorizarTransacciones(df_procesado)
-            df_modelo = df_procesado.copy()
+            # INYECCION DE HISTORIA: Combinar datos actuales con historicos para que KMeans encuentre los 5 grupos
+            df_historico = cargar_gastos_historicos()
+            df_combinado = pd.concat([df_historico, df_procesado], ignore_index=True)
+
+            matriz_vectores = vectorizarTransacciones(df_combinado)
+            df_modelo = df_combinado.copy()
             for columna in matriz_vectores.columns:
                 df_modelo[columna] = matriz_vectores[columna]
 
@@ -104,7 +109,10 @@ if not expenses.empty:
                 
                 resultado_avanzado = clasificar_patrones_avanzados(df_con_clusters, presupuesto_total)
                 df_visualizacion = resultado_avanzado["df_clasificado"]
-                resumen_avanzado = resumir_finanzas_avanzadas(df_visualizacion, presupuesto_total)
+                
+                # FILTRO PARA LA INTERFAZ: Extraemos solo los gastos recientes del usuario para las metricas y la tabla
+                df_solo_usuario = df_visualizacion.tail(len(df_procesado))
+                resumen_avanzado = resumir_finanzas_avanzadas(df_solo_usuario, presupuesto_total)
 
                 col1, col2, col3 = st.columns(3)
                 col1.metric("Total gastado", f"Bs. {resumen_avanzado['total_gastado']:.2f}")
@@ -129,7 +137,9 @@ if not expenses.empty:
                     "impactoMensual",
                     "porcentajePresupuesto",
                 ]
-                df_para_mostrar = df_visualizacion[columnas_mostrar].copy()
+                
+                # usamos el dataframe filtrado para no mostrar la historia aqui
+                df_para_mostrar = df_solo_usuario[columnas_mostrar].copy()
                 for col_num in ["monto", "frecuencia", "impactoMensual", "porcentajePresupuesto"]:
                     df_para_mostrar[col_num] = df_para_mostrar[col_num].round(2)
 
@@ -166,7 +176,7 @@ if not expenses.empty:
                 # combina diccionarios para no perder contexto en el simulador
                 info_combinada = {**resumen_avanzado, **resultado_avanzado}
                 
-                # envia variables a la memoria compartida
+                # ENVIAR AL SIMULADOR: enviamos el df_con_clusters COMPLETO (historia + usuario) para que vea K=5
                 st.session_state["datos_simulador"] = {
                     "df": df_con_clusters,
                     "centroides": centroides,
@@ -181,15 +191,15 @@ if not expenses.empty:
                 if st.button("abrir simulador de caja blanca", use_container_width=True):
                     st.switch_page("pages/simulador.py")
             else:
-                st.warning("Se necesitan al menos 2 registros v\u00e1lidos para aplicar K-Means.")
+                st.warning("Se necesitan al menos 2 registros válidos para aplicar K-Means.")
         else:
-            st.info("No hay datos validos para procesar en el analisis.")
+            st.info("No hay datos válidos para procesar en el análisis.")
     except (ValueError, KeyError, TypeError):
         st.error("No se pudieron procesar algunos datos. Verifica el formato del CSV e intenta nuevamente.")
-    except Exception:
-        st.error("Ocurrio un problema inesperado al ejecutar el analisis.")
+    except Exception as e:
+        st.error(f"Ocurrió un problema inesperado al ejecutar el análisis: {e}")
 else:
-    st.info("No hay gastos registrados todavia.")
+    st.info("No hay gastos registrados todavía.")
 
 st.divider()
 
