@@ -1,14 +1,15 @@
 # antcluster
 
 ## Descripcion
-`antcluster` es una beta academica de Inteligencia Artificial para segmentacion de gastos hormiga usando aprendizaje no supervisado con K-Means (`K=2`).
+`antcluster` es un prototipo academico de Inteligencia Artificial para segmentacion de gastos hormiga usando aprendizaje no supervisado con K-Means (K automatico con Silhouette Score).
 
 ## Objetivo de la beta
 Construir un flujo funcional de punta a punta para:
 1. Registrar gastos.
 2. Persistirlos en CSV.
-3. Preparar datos para clustering.
-4. Separar gastos en dos grupos y clasificarlos semanticamente.
+3. Preparar features avanzadas para clustering.
+4. Entrenar clusters con K automatico y explicar decisiones.
+5. Clasificar patrones de consumo y mantener aprendizaje historico persistente.
 
 ## Tecnologias usadas
 - Python
@@ -17,9 +18,11 @@ Construir un flujo funcional de punta a punta para:
 - NumPy
 - scikit-learn
 - Matplotlib
+- Plotly
+- SciPy
 
 ## Flujo de funcionamiento
-Registrar gasto -> guardar CSV -> preprocesar -> vectorizar -> K-Means -> clasificar -> mostrar resumen.
+Registrar gasto -> guardar CSV -> preprocesar -> vector avanzado -> K-Means (auto-K) -> clasificar -> mostrar resumen -> simulador -> aprendizaje historico.
 
 ## Estructura principal
 ```text
@@ -31,11 +34,17 @@ antcluster/
 |   `-- gastos_usuario.csv
 |-- src/
 |   |-- __init__.py
+|   |-- auditoria.py
+|   |-- historico.py
 |   |-- utils.py
 |   |-- preprocessing.py
 |   |-- model.py
 |   `-- classifier.py
+|-- pages/
+|   `-- simulador.py
 |-- tests/
+|   |-- test_historico.py
+|   |-- test_classifier.py
 |   |-- test_model.py
 |   `-- test_preprocessing.py
 `-- docs/
@@ -66,4 +75,4 @@ python -m unittest discover -s tests -v
 ```
 
 ## Nota de entorno
-Si ejecutas comandos con un Python global sin dependencias instaladas, pueden aparecer errores como `ModuleNotFoundError: No module named 'pandas'`. Usa el entorno virtual del proyecto para garantizar una ejecucion reproducible.
+Si ejecutas comandos con un Python global sin dependencias instaladas, pueden aparecer errores como `ModuleNotFoundError: No module named 'plotly'`. Usa el entorno virtual del proyecto y reinstala `requirements.txt` para garantizar una ejecucion reproducible.

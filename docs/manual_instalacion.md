@@ -22,7 +22,7 @@ streamlit run app.py
 
 ## Verificacion rapida de dependencias
 ```bash
-python -c "import pandas, streamlit, sklearn, matplotlib"
+python -c "import pandas, streamlit, sklearn, matplotlib, plotly, scipy"
 ```
 
 ## Ejecucion de pruebas

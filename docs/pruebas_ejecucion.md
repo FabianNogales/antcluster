@@ -59,4 +59,4 @@ Descripcion: interfaz principal con formulario, confirmacion de guardado y actua
 
 Descripcion: panel con metricas de gastos hormiga/primarios y tabla clasificada por tipo.
 
-Nota: la visualizacion de clusters se genera dinamicamente en la app con Matplotlib (monto vs frecuencia).
+Nota: la visualizacion de clusters y trazabilidad se genera dinamicamente con Plotly en el simulador de caja blanca.

@@ -11,25 +11,25 @@ from src.classifier import clasificar_patrones_avanzados
 
 def _obtener_nombre_cluster(cluster_id: int, info: dict, df: pd.DataFrame) -> str:
     if info.get("cluster_hormiga") == cluster_id:
-        return "gasto hormiga"
+        return "Gasto Hormiga"
     if info.get("cluster_primario") == cluster_id:
-        return "gasto primario"
+        return "Gasto Primario"
     if "resumen_por_cluster" in info:
         resumen = info["resumen_por_cluster"]
         filtro = resumen[resumen["cluster"] == cluster_id]
         if not filtro.empty:
             return filtro.iloc[0]["categoria_patron"]
-    return f"perfil {cluster_id}"
+    return f"Perfil {cluster_id}"
 
 def _renderizar_justificacion_k(scores: pd.DataFrame, mejor_k: int):
-    st.markdown("### seleccion automatica del k optimo")
-    st.write("el agente evaluo particiones iterativas usando silhouette score.")
+    st.markdown("### Selección automática del K óptimo")
+    st.write("El agente evaluó particiones iterativas usando Silhouette Score.")
     st.latex(r"s(i) = \frac{b(i) - a(i)}{\max\{a(i), b(i)\}}")
     if scores is not None and not scores.empty:
         st.dataframe(scores, hide_index=True)
-        st.markdown(f"**decision:** estructura establecida en k = {mejor_k}")
+        st.markdown(f"**Decisión:** estructura establecida en K = {mejor_k}")
     else:
-        st.markdown("**nota:** modelo ejecutado con k estatico.")
+        st.markdown("**Nota:** modelo ejecutado con K estático.")
 
 def _renderizar_radar(vector_gasto, centroide, columnas):
     fig = go.Figure()
@@ -69,38 +69,43 @@ def _renderizar_vista_nodo(registro, centroides, columnas, info, df):
     # calculo de z-score
     distancias_df = calcular_distancias_a_centroides([float(registro[c]) for c in columnas], centroides)
     dist_real = float(distancias_df[distancias_df["cluster"] == cluster_id]["distancia"].iloc[0])
-    z_score = (dist_real - distancias_df["distancia"].mean()) / distancias_df["distancia"].std() if distancias_df["distancia"].std() > 0 else 0
+    z_scores = stats.zscore(distancias_df["distancia"].to_numpy(dtype=float), ddof=0, nan_policy="omit")
+    if np.isnan(z_scores).all():
+        z_score = 0.0
+    else:
+        idx = int(distancias_df.index[distancias_df["cluster"] == cluster_id][0])
+        z_score = float(np.nan_to_num(z_scores[idx], nan=0.0))
 
-    st.markdown(f"### analisis: {nombre}")
+    st.markdown(f"### Análisis: {nombre}")
     
     # controles con key unico
     col_ctrl1, col_ctrl2 = st.columns(2)
-    show_g = col_ctrl1.checkbox("mostrar gasto", True, key=f"show_g_{nombre}")
-    show_c = col_ctrl2.checkbox("mostrar centroides", True, key=f"show_c_{nombre}")
+    show_g = col_ctrl1.checkbox("Mostrar gasto", True, key=f"show_g_{nombre}")
+    show_c = col_ctrl2.checkbox("Mostrar centroides", True, key=f"show_c_{nombre}")
     
     _renderizar_grafico_interactivo([float(registro[c]) for c in columnas], centroides, cluster_id, info, df, show_g, show_c)
     
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("#### 1. trazabilidad vectorial")
+        st.markdown("#### 1. Trazabilidad vectorial")
         df_vec = pd.DataFrame({"dimension": columnas, "valor": [float(registro[c]) for c in columnas]})
         fig_scatter = px.scatter(df_vec, x="dimension", y="valor", size="valor", color="dimension")
         fig_scatter.update_layout(template="plotly_dark")
         st.plotly_chart(fig_scatter, use_container_width=True)
-        st.write(f"**z-score:** {z_score:.2f}")
+        st.write(f"**Z-score:** {z_score:.2f}")
 
     with col2:
-        st.markdown("#### 2. comparativa multidimensional")
+        st.markdown("#### 2. Comparativa multidimensional")
         _renderizar_radar([float(registro[c]) for c in columnas], centroides[cluster_id], columnas)
         
-    st.markdown(f"**asignacion:** {_obtener_nombre_cluster(cluster_id, info, df)}")
+    st.markdown(f"**Asignación:** {_obtener_nombre_cluster(cluster_id, info, df)}")
 
 def _renderizar_glosario():
-    with st.expander("conceptos clave del modelo"):
+    with st.expander("Conceptos clave del modelo"):
         st.markdown("""
-        - **silhouette score:** mide qué tan bien se ajusta cada dato a su grupo asignado. el valor va de -1 a 1, donde 1 representa una separación clara entre grupos.
-        - **z-score:** mide la desviación de un dato respecto al promedio del clúster. un valor cercano a 0 significa que el gasto es muy representativo del grupo; valores altos indican que es un caso inusual.
-        - **centroide:** es el punto central o promedio aritmético de todos los puntos en un clúster. define el perfil característico del grupo.
+        - **Silhouette Score:** mide qué tan bien se ajusta cada dato a su grupo asignado. El valor va de -1 a 1.
+        - **Z-score:** mide la desviación de un dato respecto al promedio del clúster.
+        - **Centroide:** es el punto central o promedio aritmético de todos los puntos en un clúster.
         """)
 
 def renderizar_simulador_completo(datos_modelo: dict):
@@ -108,8 +113,8 @@ def renderizar_simulador_completo(datos_modelo: dict):
     if "presupuesto_auditoria" not in st.session_state:
         st.session_state["presupuesto_auditoria"] = 200.0
     
-    st.markdown("### analisis de sensibilidad")
-    nuevo_presupuesto = st.slider("ajuste de presupuesto total", 50.0, 1000.0, st.session_state["presupuesto_auditoria"])
+    st.markdown("### Análisis de sensibilidad")
+    nuevo_presupuesto = st.slider("Ajuste de presupuesto total", 50.0, 1000.0, st.session_state["presupuesto_auditoria"])
     st.session_state["presupuesto_auditoria"] = nuevo_presupuesto
     
     df_raw = datos_modelo.get("df")
@@ -120,8 +125,35 @@ def renderizar_simulador_completo(datos_modelo: dict):
 
     info_avanzada = clasificar_patrones_avanzados(df_raw, nuevo_presupuesto)
     df = info_avanzada["df_clasificado"]
+
+    st.markdown("### Datos usados por el agente")
+    columnas_historial = [
+        col
+        for col in [
+            "nombre",
+            "monto",
+            "hora",
+            "frecuencia",
+            "impactoMensual",
+            "porcentajePresupuesto",
+            "cluster",
+            "categoria_patron",
+        ]
+        if col in df.columns
+    ]
+    st.dataframe(df[columnas_historial], use_container_width=True, hide_index=True)
+
+    st.markdown("### Vectorización y matriz X")
+    columnas_x = [c for c in columnas if c in df.columns]
+    st.dataframe(df[columnas_x], use_container_width=True, hide_index=True)
+
+    if centroides is not None and len(columnas) > 0:
+        st.markdown("### Centroides")
+        centroides_df = pd.DataFrame(centroides, columns=columnas)
+        centroides_df.insert(0, "cluster", range(len(centroides_df)))
+        st.dataframe(centroides_df, use_container_width=True, hide_index=True)
     
-    pestana_k, pestana_reciente, pestana_general = st.tabs(["justificacion de k", "analisis reciente", "trazabilidad"])
+    pestana_k, pestana_reciente, pestana_general = st.tabs(["Justificación de K", "Análisis reciente", "Trazabilidad"])
 
     with pestana_k:
         _renderizar_glosario()
@@ -132,6 +164,6 @@ def renderizar_simulador_completo(datos_modelo: dict):
 
     with pestana_general:
         df_unicos = df.drop_duplicates(subset=["nombre"])
-        nombre = st.selectbox("directorio de gastos", options=df_unicos["nombre"].tolist())
+        nombre = st.selectbox("Directorio de gastos", options=df_unicos["nombre"].tolist())
         registro = df_unicos[df_unicos["nombre"] == nombre].iloc[0]
         _renderizar_vista_nodo(registro, centroides, columnas, info_avanzada, df)
