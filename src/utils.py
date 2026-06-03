@@ -1,5 +1,6 @@
 """Utilidades para gestionar los datos CSV de AntCluster."""
 
+import sys
 from datetime import date, datetime, time
 from pathlib import Path
 
@@ -10,7 +11,16 @@ from src.preprocessing import calcular_frecuencia_mensual_oficial
 
 OFFICIAL_COLUMNS = ["id", "nombre", "monto", "fecha", "hora", "frecuencia"]
 EXTRA_INCOME_COLUMNS = ["id", "descripcion", "monto", "fecha", "hora"]
-BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _resolve_base_dir() -> Path:
+    """Usa la carpeta del exe en builds PyInstaller y el repo en desarrollo."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+BASE_DIR = _resolve_base_dir()
 DATA_DIR = BASE_DIR / "data"
 USER_CSV = DATA_DIR / "gastos_usuario.csv"
 DEMO_CSV = DATA_DIR / "gastos_demo.csv"

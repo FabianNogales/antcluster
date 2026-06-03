@@ -5,3 +5,5 @@ scikit-learn
 matplotlib
 plotly
 scipy
+PySide6
+pyinstaller
