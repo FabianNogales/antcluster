@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import streamlit as st
 
 from src.classifier import (
     calcular_recomendacion_mensual,
@@ -15,7 +14,7 @@ from src.model import aplicar_kmeans_avanzado
 
 
 def ejecutar_analisis_agente(expenses: pd.DataFrame, presupuesto_total: float) -> dict | None:
-    """Ejecuta el analisis actual y deja los datos listos para el simulador."""
+    """Ejecuta el analisis actual y devuelve datos listos para UI o simulador."""
     if expenses.empty:
         return None
 
@@ -50,7 +49,7 @@ def ejecutar_analisis_agente(expenses: pd.DataFrame, presupuesto_total: float) -
     )
 
     info_combinada = {**resumen_avanzado, **resultado_avanzado}
-    st.session_state["datos_simulador"] = {
+    datos_simulador = {
         "df": df_con_clusters,
         "centroides": centroides,
         "info": info_combinada,
@@ -65,6 +64,7 @@ def ejecutar_analisis_agente(expenses: pd.DataFrame, presupuesto_total: float) -
         "resumen": resumen_avanzado,
         "recomendacion": recomendacion,
         "resultados_modelo": resultados_modelo,
+        "datos_simulador": datos_simulador,
         "mensaje": None,
     }
 
@@ -92,25 +92,3 @@ def ejecutar_recomendacion_historica(presupuesto_total: float) -> dict | None:
         df_clasificado=resultado_avanzado["df_clasificado"],
         modo="ultimo_mes",
     )
-
-
-def render_recomendacion(recomendacion: dict) -> None:
-    """Muestra la recomendacion mensual en columnas."""
-    if recomendacion.get("advertencia_periodo"):
-        st.warning(recomendacion["advertencia_periodo"])
-    elif recomendacion.get("periodo_texto"):
-        st.caption(f"Recomendacion basada en el ultimo mes historico: {recomendacion['periodo_texto']}.")
-    else:
-        st.caption("Basado en el ultimo mes historico disponible.")
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Apartar para primarios", f"Bs. {recomendacion['apartar_primarios']:.2f}")
-    col2.metric("Controlar hormiga", f"Bs. {recomendacion['controlar_hormiga']:.2f}")
-    col3.metric("Reservar extraordinarios", f"Bs. {recomendacion['reservar_extraordinarios']:.2f}")
-    col4.metric("Posible ahorro", f"Bs. {recomendacion['ahorro_estimado']:.2f}")
-
-    st.caption(f"Compromiso del presupuesto: {recomendacion['compromiso_presupuesto']:.1f}%")
-    if recomendacion["presupuesto_cubre_patron"]:
-        st.success(recomendacion["mensaje"])
-    else:
-        st.warning("El presupuesto no cubre el patron actual de consumo.")

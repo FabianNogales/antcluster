@@ -19,6 +19,8 @@ inicializar_archivos_historicos()
 _, presupuesto_total, _, _ = render_sidebar_presupuesto()
 expenses = read_expenses()
 analisis_actual = ejecutar_analisis_agente(expenses, presupuesto_total)
+if analisis_actual and analisis_actual.get("datos_simulador"):
+    st.session_state["datos_simulador"] = analisis_actual["datos_simulador"]
 
 st.title("Analisis del agente")
 st.subheader("Analisis del agente / Caja blanca")

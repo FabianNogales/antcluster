@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.analisis import ejecutar_analisis_agente, ejecutar_recomendacion_historica, render_recomendacion
+from src.analisis import ejecutar_analisis_agente, ejecutar_recomendacion_historica
 from src.historico import cargar_modelo_historico, inicializar_archivos_historicos
 from src.sidebar import render_sidebar_presupuesto
 from src.theme import apply_app_theme
@@ -34,10 +34,34 @@ def _set_flash(level: str, message: str) -> None:
     st.session_state["flash_message"] = {"level": level, "message": message}
 
 
+def render_recomendacion(recomendacion: dict) -> None:
+    """Muestra la recomendacion mensual en Streamlit."""
+    if recomendacion.get("advertencia_periodo"):
+        st.warning(recomendacion["advertencia_periodo"])
+    elif recomendacion.get("periodo_texto"):
+        st.caption(f"Recomendacion basada en el ultimo mes historico: {recomendacion['periodo_texto']}.")
+    else:
+        st.caption("Basado en el ultimo mes historico disponible.")
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Apartar para primarios", f"Bs. {recomendacion['apartar_primarios']:.2f}")
+    col2.metric("Controlar hormiga", f"Bs. {recomendacion['controlar_hormiga']:.2f}")
+    col3.metric("Reservar extraordinarios", f"Bs. {recomendacion['reservar_extraordinarios']:.2f}")
+    col4.metric("Posible ahorro", f"Bs. {recomendacion['ahorro_estimado']:.2f}")
+
+    st.caption(f"Compromiso del presupuesto: {recomendacion['compromiso_presupuesto']:.1f}%")
+    if recomendacion["presupuesto_cubre_patron"]:
+        st.success(recomendacion["mensaje"])
+    else:
+        st.warning("El presupuesto no cubre el patron actual de consumo.")
+
+
 presupuesto_base, presupuesto_total, ingresos_extra, resumen_ingresos = render_sidebar_presupuesto()
 expenses = read_expenses()
 summary = get_expenses_summary()
 analisis_actual = ejecutar_analisis_agente(expenses, presupuesto_total)
+if analisis_actual and analisis_actual.get("datos_simulador"):
+    st.session_state["datos_simulador"] = analisis_actual["datos_simulador"]
 modelo_historico = cargar_modelo_historico()
 
 st.title("AntCluster - Gestion de datos")
