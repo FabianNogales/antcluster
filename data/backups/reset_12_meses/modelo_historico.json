@@ -1,0 +1,102 @@
+{
+  "entrenado": true,
+  "fecha_entrenamiento": "2026-05-26T19:00:16",
+  "cantidad_registros": 34,
+  "presupuesto_total": 500.0,
+  "columnas_features": [
+    "monto",
+    "horaDecimal",
+    "frecuencia",
+    "impactoMensual",
+    "porcentajePresupuesto"
+  ],
+  "mejor_k": 5,
+  "scores_silhouette": [
+    {
+      "k": 2,
+      "silhouette_score": 0.5256625496043473
+    },
+    {
+      "k": 3,
+      "silhouette_score": 0.515621626933385
+    },
+    {
+      "k": 4,
+      "silhouette_score": 0.5776288759261479
+    },
+    {
+      "k": 5,
+      "silhouette_score": 0.6626688456693677
+    }
+  ],
+  "centroides": [
+    [
+      3.666666666666668,
+      17.651666666666667,
+      7.333333333333333,
+      26.0,
+      5.2
+    ],
+    [
+      4.0,
+      8.9375,
+      7.0,
+      27.0,
+      5.4
+    ],
+    [
+      18.888888888888886,
+      16.314444444444444,
+      4.555555555555555,
+      85.55555555555556,
+      17.11111111111111
+    ],
+    [
+      32.5,
+      20.75,
+      1.0,
+      32.5,
+      6.5
+    ],
+    [
+      4.333333333333334,
+      14.862222222222222,
+      2.333333333333333,
+      10.333333333333336,
+      2.0666666666666673
+    ]
+  ],
+  "categorias_por_cluster": {
+    "0": "Gasto Hormiga Recurrente",
+    "1": "Gasto Hormiga Recurrente",
+    "2": "Gasto Primario",
+    "3": "Gasto Extraordinario",
+    "4": "Gasto Hormiga Ocasional"
+  },
+  "resumen_entrenamiento": {
+    "total_gastado": 328.0,
+    "gastos_hormiga": 93.0,
+    "gastos_primarios": 170.0,
+    "gastos_extraordinarios": 65.0,
+    "porcentaje_hormiga": 18.6,
+    "resumen_categorias": [
+      {
+        "categoria": "Gasto Hormiga Recurrente",
+        "cantidad": 14
+      },
+      {
+        "categoria": "Gasto Primario",
+        "cantidad": 9
+      },
+      {
+        "categoria": "Gasto Hormiga Ocasional",
+        "cantidad": 9
+      },
+      {
+        "categoria": "Gasto Extraordinario",
+        "cantidad": 2
+      }
+    ],
+    "mensaje": "Entrenamiento historico exitoso."
+  }
+}

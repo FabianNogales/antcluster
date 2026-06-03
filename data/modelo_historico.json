@@ -1,7 +1,7 @@
 {
   "entrenado": true,
-  "fecha_entrenamiento": "2026-05-26T19:00:16",
-  "cantidad_registros": 34,
+  "fecha_entrenamiento": "2026-06-02T20:32:16",
+  "cantidad_registros": 1232,
   "presupuesto_total": 500.0,
   "columnas_features": [
     "monto",
@@ -14,87 +14,87 @@
   "scores_silhouette": [
     {
       "k": 2,
-      "silhouette_score": 0.5256625496043473
+      "silhouette_score": 0.44121013447783786
     },
     {
       "k": 3,
-      "silhouette_score": 0.515621626933385
+      "silhouette_score": 0.40419560543988514
     },
     {
       "k": 4,
-      "silhouette_score": 0.5776288759261479
+      "silhouette_score": 0.42453783862857797
     },
     {
       "k": 5,
-      "silhouette_score": 0.6626688456693677
+      "silhouette_score": 0.4752631282005496
     }
   ],
   "centroides": [
     [
-      3.666666666666668,
-      17.651666666666667,
-      7.333333333333333,
-      26.0,
-      5.2
+      7.022486772486773,
+      15.511031746031746,
+      5.391534391534392,
+      25.207671957671963,
+      5.041534391534391
     ],
     [
-      4.0,
-      8.9375,
-      7.0,
-      27.0,
-      5.4
+      19.986622073578594,
+      15.799030100334448,
+      13.531772575250836,
+      266.0936454849498,
+      53.21872909698996
     ],
     [
-      18.888888888888886,
-      16.314444444444444,
-      4.555555555555555,
-      85.55555555555556,
-      17.11111111111111
+      7.746268656716417,
+      8.646268656716417,
+      14.734328358208955,
+      94.40298507462687,
+      18.880597014925375
     ],
     [
-      32.5,
-      20.75,
-      1.0,
-      32.5,
-      6.5
+      108.15384615384615,
+      12.897692307692308,
+      0.9999999999999982,
+      108.15384615384616,
+      21.630769230769232
     ],
     [
-      4.333333333333334,
-      14.862222222222222,
-      2.333333333333333,
-      10.333333333333336,
-      2.0666666666666673
+      4.608695652173914,
+      17.66985507246377,
+      17.0,
+      73.13768115942028,
+      14.627536231884058
     ]
   ],
   "categorias_por_cluster": {
-    "0": "Gasto Hormiga Recurrente",
-    "1": "Gasto Hormiga Recurrente",
-    "2": "Gasto Primario",
+    "0": "Gasto Hormiga Ocasional",
+    "1": "Gasto Primario",
+    "2": "Gasto Hormiga Ocasional",
     "3": "Gasto Extraordinario",
-    "4": "Gasto Hormiga Ocasional"
+    "4": "Gasto Hormiga Recurrente"
   },
   "resumen_entrenamiento": {
-    "total_gastado": 328.0,
-    "gastos_hormiga": 93.0,
-    "gastos_primarios": 170.0,
-    "gastos_extraordinarios": 65.0,
-    "porcentaje_hormiga": 18.6,
+    "total_gastado": 13585.5,
+    "gastos_hormiga": 5140.5,
+    "gastos_primarios": 6051.0,
+    "gastos_extraordinarios": 2394.0,
+    "porcentaje_hormiga": 1028.1000000000001,
     "resumen_categorias": [
       {
-        "categoria": "Gasto Hormiga Recurrente",
-        "cantidad": 14
+        "categoria": "Gasto Hormiga Ocasional",
+        "cantidad": 583
       },
       {
         "categoria": "Gasto Primario",
-        "cantidad": 9
+        "cantidad": 311
       },
       {
-        "categoria": "Gasto Hormiga Ocasional",
-        "cantidad": 9
+        "categoria": "Gasto Hormiga Recurrente",
+        "cantidad": 297
       },
       {
         "categoria": "Gasto Extraordinario",
-        "cantidad": 2
+        "cantidad": 41
       }
     ],
     "mensaje": "Entrenamiento historico exitoso."
