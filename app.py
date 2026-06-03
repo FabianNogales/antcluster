@@ -1,29 +1,17 @@
-﻿"""Interfaz principal para la gestion de datos de AntCluster."""
+"""Interfaz principal para la gestion de datos de AntCluster."""
 
-import pandas as pd
+from __future__ import annotations
+
 import streamlit as st
 
-from src.classifier import clasificar_patrones_avanzados, resumir_finanzas_avanzadas
-from src.historico import (
-    MODELO_HISTORICO_JSON,
-    cargar_gastos_historicos,
-    cargar_modelo_historico,
-    clasificar_gasto_con_modelo_historico,
-    entrenar_agente_historico,
-    guardar_modelo_historico,
-    inicializar_archivos_historicos,
-)
-from src.model import aplicar_kmeans_avanzado
-from src.preprocessing import (
-    DEFAULT_PRESUPUESTO_TOTAL,
-    calcular_frecuencia_mensual_csv,
-    normalizar_presupuesto_total,
-    vectorizarTransacciones,
-)
+from src.analisis import ejecutar_analisis_agente, render_recomendacion
+from src.classifier import calcular_recomendacion_mensual
+from src.historico import cargar_modelo_historico, inicializar_archivos_historicos
+from src.sidebar import render_sidebar_presupuesto
 from src.utils import (
-    USER_CSV,
     get_expenses_summary,
     get_user_csv_bytes,
+    guardar_ingreso_extra,
     initialize_data_files,
     load_demo_data,
     read_expenses,
@@ -31,303 +19,128 @@ from src.utils import (
     save_expense,
 )
 
+
 st.set_page_config(page_title="AntCluster - Gestion de datos", layout="wide")
 initialize_data_files()
 inicializar_archivos_historicos()
 
-st.title("AntCluster - Gestion de datos")
+flash = st.session_state.pop("flash_message", None)
+if flash:
+    getattr(st, flash.get("level", "info"))(flash.get("message", ""))
 
-with st.form("formulario_gasto"):
-    nombre = st.text_input("Nombre del gasto")
-    monto = st.number_input("Monto", min_value=0.0, step=0.5, format="%.2f")
-    enviado = st.form_submit_button("Guardar gasto")
 
-if enviado:
-    try:
-        save_expense(nombre, monto)
-        st.success("El gasto fue guardado correctamente.")
-    except ValueError as error:
-        st.error(str(error))
+def _set_flash(level: str, message: str) -> None:
+    st.session_state["flash_message"] = {"level": level, "message": message}
 
-summary = get_expenses_summary()
-col_count, col_total, col_average = st.columns(3)
-col_count.metric("Cantidad de gastos", summary["cantidad_gastos"])
-col_total.metric("Total gastado", f"Bs. {summary['total_gastado']:.2f}")
-col_average.metric("Promedio por gasto", f"Bs. {summary['promedio_gasto']:.2f}")
 
-st.subheader("Gastos registrados")
+presupuesto_base, presupuesto_total, ingresos_extra, resumen_ingresos = render_sidebar_presupuesto()
 expenses = read_expenses()
-st.dataframe(expenses, width="stretch", hide_index=True)
-
-# ==================== ANALISIS DE CLUSTERING ====================
-st.divider()
-st.subheader("Analisis de Gastos con K-Means")
-
-if "presupuesto_total" not in st.session_state:
-    st.session_state["presupuesto_total"] = float(DEFAULT_PRESUPUESTO_TOTAL)
-
-presupuesto_ui = normalizar_presupuesto_total(
-    st.session_state.get("presupuesto_total"),
-    fallback=DEFAULT_PRESUPUESTO_TOTAL,
-    allow_non_positive=True,
-)
-presupuesto_total = st.sidebar.number_input(
-    "Presupuesto total (Bs)",
-    min_value=0.0,
-    value=float(presupuesto_ui),
-    step=10.0,
-    format="%.2f",
-)
-st.session_state["presupuesto_total"] = float(presupuesto_total)
-
-if not expenses.empty:
-    try:
-        df_procesado = calcular_frecuencia_mensual_csv(str(USER_CSV))
-
-        if not df_procesado.empty:
-            # INYECCION DE HISTORIA: Combinar datos actuales con historicos para que KMeans encuentre los 5 grupos
-            df_historico = cargar_gastos_historicos()
-            df_combinado = pd.concat([df_historico, df_procesado], ignore_index=True)
-
-            matriz_vectores = vectorizarTransacciones(df_combinado)
-            df_modelo = df_combinado.copy()
-            for columna in matriz_vectores.columns:
-                df_modelo[columna] = matriz_vectores[columna]
-
-            resultados_modelo = aplicar_kmeans_avanzado(
-                df_modelo,
-                presupuesto_total=presupuesto_total,
-                random_state=42,
-            )
-            
-            df_con_clusters = resultados_modelo.get("df")
-            centroides = resultados_modelo.get("centroides")
-            mensaje_error = resultados_modelo.get("mensaje")
-
-            if mensaje_error is None and centroides is not None:
-                st.write("**Resumen Financiero:**")
-                
-                resultado_avanzado = clasificar_patrones_avanzados(df_con_clusters, presupuesto_total)
-                df_visualizacion = resultado_avanzado["df_clasificado"]
-                
-                # FILTRO PARA LA INTERFAZ: Extraemos solo los gastos recientes del usuario para las metricas y la tabla
-                df_solo_usuario = df_visualizacion.tail(len(df_procesado))
-                resumen_avanzado = resumir_finanzas_avanzadas(df_solo_usuario, presupuesto_total)
-
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Total gastado", f"Bs. {resumen_avanzado['total_gastado']:.2f}")
-                col2.metric("Gastos Hormiga", f"Bs. {resumen_avanzado['gastos_hormiga']:.2f}")
-                col3.metric("Gastos Primarios", f"Bs. {resumen_avanzado['gastos_primarios']:.2f}")
-
-                col4, col5 = st.columns(2)
-                col4.metric("Gastos Extraord.", f"Bs. {resumen_avanzado['gastos_extraordinarios']:.2f}")
-                col5.metric(
-                    "Porcentaje Hormiga",
-                    f"{resumen_avanzado['porcentaje_hormiga']:.1f}%",
-                )
-
-                # configura las 5 columnas base mas el patron
-                columnas_mostrar = [
-                    "nombre",
-                    "categoria_patron",
-                    "monto",
-                    "fecha",
-                    "hora",
-                    "frecuencia",
-                    "impactoMensual",
-                    "porcentajePresupuesto",
-                ]
-                
-                # usamos el dataframe filtrado para no mostrar la historia aqui
-                df_para_mostrar = df_solo_usuario[columnas_mostrar].copy()
-                for col_num in ["monto", "frecuencia", "impactoMensual", "porcentajePresupuesto"]:
-                    df_para_mostrar[col_num] = df_para_mostrar[col_num].round(2)
-
-                # colorea basado en la nueva columna de categoria
-                def colorear_columna_tipo(columna):
-                    estilos = []
-                    for valor in columna:
-                        if "Hormiga" in str(valor):
-                            estilos.append("color: #f1c40f; font-weight: bold;")
-                        elif "Primario" in str(valor):
-                            estilos.append("color: #2ecc71; font-weight: bold;")
-                        elif "Extraordinario" in str(valor):
-                            estilos.append("color: #e74c3c; font-weight: bold;")
-                        else:
-                            estilos.append("")
-                    return estilos
-
-                st.write("**Tabla Clasificada Avanzada:**")
-                st.dataframe(
-                    df_para_mostrar.style.apply(colorear_columna_tipo, subset=["categoria_patron"], axis=0),
-                    column_config={
-                        "nombre": st.column_config.TextColumn("nombre", width="medium"),
-                        "categoria_patron": st.column_config.TextColumn("categoria_patron", width="medium"),
-                        "monto": st.column_config.NumberColumn("monto", format="%.2f"),
-                        "frecuencia": st.column_config.NumberColumn("frecuencia", format="%.2f"),
-                        "impactoMensual": st.column_config.NumberColumn("impactoMensual", format="%.2f"),
-                        "porcentajePresupuesto": st.column_config.NumberColumn("porcentajePresupuesto", format="%.2f"),
-                    },
-                    use_container_width=True,
-                    hide_index=True,
-                )
-                st.divider()
-                
-                # combina diccionarios para no perder contexto en el simulador
-                info_combinada = {**resumen_avanzado, **resultado_avanzado}
-                
-                # ENVIAR AL SIMULADOR: enviamos el df_con_clusters COMPLETO (historia + usuario) para que vea K=5
-                st.session_state["datos_simulador"] = {
-                    "df": df_con_clusters,
-                    "centroides": centroides,
-                    "info": info_combinada,
-                    "mejor_k": resultados_modelo.get("mejor_k"),
-                    "scores": resultados_modelo.get("scores"),
-                    "columnas_features": resultados_modelo.get("columnas_features"),
-                    "presupuesto_total": float(presupuesto_total),
-                }
-                
-                # boton nativo sin emojis
-                if st.button("abrir simulador de caja blanca", use_container_width=True):
-                    st.switch_page("pages/simulador.py")
-            else:
-                st.warning("Se necesitan al menos 2 registros válidos para aplicar K-Means.")
-        else:
-            st.info("No hay datos válidos para procesar en el análisis.")
-    except (ValueError, KeyError, TypeError):
-        st.error("No se pudieron procesar algunos datos. Verifica el formato del CSV e intenta nuevamente.")
-    except Exception as e:
-        st.error(f"Ocurrió un problema inesperado al ejecutar el análisis: {e}")
-else:
-    st.info("No hay gastos registrados todavía.")
-
-st.divider()
-
-# ==================== APRENDIZAJE HISTORICO ====================
-st.subheader("Aprendizaje histórico")
+summary = get_expenses_summary()
+analisis_actual = ejecutar_analisis_agente(expenses, presupuesto_total)
 modelo_historico = cargar_modelo_historico()
-df_historico = cargar_gastos_historicos()
-estado_modelo = "entrenado" if modelo_historico.get("entrenado") else "no entrenado"
-existe_modelo = MODELO_HISTORICO_JSON.exists() and MODELO_HISTORICO_JSON.stat().st_size > 0
-st.write(f"Estado del modelo histórico: **{estado_modelo}**")
-st.caption(f"Archivo modelo_historico.json: {'Disponible' if existe_modelo else 'No disponible'}")
-st.caption(f"Registros históricos disponibles: {len(df_historico)}")
 
-if st.button("Entrenar agente histórico", use_container_width=True):
-    try:
-        nuevo_modelo = entrenar_agente_historico(df_historico, presupuesto_total=presupuesto_total)
-        guardar_modelo_historico(nuevo_modelo)
-        st.success("Entrenamiento histórico completado y guardado.")
-        st.rerun()
-    except Exception:
-        st.error("No se pudo entrenar el modelo histórico con los datos actuales.")
+st.title("AntCluster - Gestion de datos")
+st.write("Gestiona gastos, registra ingresos extra y revisa el analisis financiero mensual.")
 
-if modelo_historico.get("entrenado"):
-    st.write("**Resumen del entrenamiento histórico:**")
-    col_h1, col_h2, col_h3, col_h4 = st.columns(4)
-    col_h1.metric("Fecha entrenamiento", str(modelo_historico.get("fecha_entrenamiento") or "-"))
-    col_h2.metric("Registros usados", int(modelo_historico.get("cantidad_registros") or 0))
-    col_h3.metric("Mejor K histórico", int(modelo_historico.get("mejor_k") or 0))
-    presupuesto_entrenamiento = modelo_historico.get("presupuesto_total", None)
-    if presupuesto_entrenamiento is None:
-        col_h4.metric("Presupuesto entrenamiento", "-")
-    else:
-        col_h4.metric("Presupuesto entrenamiento", f"Bs. {float(presupuesto_entrenamiento):.2f}")
+col_top1, col_top2, col_top3, col_top4 = st.columns(4)
+col_top1.metric("Presupuesto base", f"Bs. {presupuesto_base:.2f}")
+col_top2.metric("Ingresos extra", f"Bs. {float(resumen_ingresos['total_ingresos_extra']):.2f}")
+col_top3.metric("Presupuesto total", f"Bs. {presupuesto_total:.2f}")
+col_top4.metric("Saldo disponible", f"Bs. {presupuesto_total - float(summary['total_gastado']):.2f}")
 
-    centroides_hist = modelo_historico.get("centroides", [])
-    columnas_hist = modelo_historico.get("columnas_features", [])
-    if centroides_hist and columnas_hist:
-        st.write("Centroides históricos")
-        st.dataframe(
-            data={
-                "cluster": list(range(len(centroides_hist))),
-                **{
-                    col: [float(row[idx]) for row in centroides_hist]
-                    for idx, col in enumerate(columnas_hist)
-                },
-            },
-            use_container_width=True,
-            hide_index=True,
-        )
+st.subheader("Resumen operativo")
+col_sum1, col_sum2, col_sum3, col_sum4 = st.columns(4)
+col_sum1.metric("Cantidad de gastos", int(summary["cantidad_gastos"]))
+col_sum2.metric("Total gastado", f"Bs. {float(summary['total_gastado']):.2f}")
+col_sum3.metric("Promedio por gasto", f"Bs. {float(summary['promedio_gasto']):.2f}")
+col_sum4.metric("Cantidad ingresos extra", int(resumen_ingresos["cantidad_ingresos"]))
 
-    scores_hist = modelo_historico.get("scores_silhouette", [])
-    if scores_hist:
-        st.write("Scores de Silhouette históricos")
-        st.dataframe(scores_hist, use_container_width=True, hide_index=True)
+col_budget, col_income = st.columns(2)
 
-    with st.form("formulario_clasificacion_historica"):
-        st.write("Clasificar nuevo gasto con centroides históricos")
-        if presupuesto_entrenamiento is None:
-            st.caption(f"Presupuesto usado para clasificar ahora: Bs. {float(presupuesto_total):.2f}")
-        else:
-            st.caption(
-                f"Presupuesto actual (clasificación): Bs. {float(presupuesto_total):.2f} | "
-                f"Presupuesto del entrenamiento histórico: Bs. {float(presupuesto_entrenamiento):.2f}"
-            )
-        nombre_h = st.text_input("Nombre nuevo gasto", value="Gasto nuevo")
-        monto_h = st.number_input("Monto nuevo gasto", min_value=0.0, step=0.5, format="%.2f")
-        fecha_h = st.date_input("Fecha nuevo gasto")
-        hora_h = st.text_input("Hora nuevo gasto (HH:MM)", value="12:00")
-        frecuencia_h = st.number_input("Frecuencia (opcional)", min_value=0, value=1, step=1)
-        enviar_h = st.form_submit_button("Clasificar con histórico")
+with col_budget:
+    st.subheader("Presupuesto y gastos")
+    st.caption(
+        f"Presupuesto base: Bs. {presupuesto_base:.2f} | "
+        f"Ingresos extra: Bs. {float(resumen_ingresos['total_ingresos_extra']):.2f} | "
+        f"Presupuesto total: Bs. {presupuesto_total:.2f}"
+    )
+    with st.form("formulario_gasto"):
+        nombre = st.text_input("Nombre del gasto")
+        monto = st.number_input("Monto del gasto", min_value=0.0, step=0.5, format="%.2f")
+        enviado = st.form_submit_button("Guardar gasto", use_container_width=True)
 
-    if enviar_h:
+    if enviado:
         try:
-            resultado_hist = clasificar_gasto_con_modelo_historico(
-                {
-                    "nombre": nombre_h,
-                    "monto": monto_h,
-                    "fecha": fecha_h.strftime("%Y-%m-%d"),
-                    "hora": hora_h,
-                    "frecuencia": frecuencia_h,
-                },
-                modelo_historico=modelo_historico,
-                presupuesto_total=presupuesto_total,
-            )
-            st.success("Clasificación histórica ejecutada.")
-            st.write(f"Cluster asignado: **{resultado_hist['cluster_asignado']}**")
-            st.write(f"Categoría interpretada: **{resultado_hist['categoria_interpretada']}**")
-            st.write(resultado_hist["explicacion"])
-            presupuesto_entrenado = resultado_hist["presupuesto_modelo_entrenado"]
-            presupuesto_entrenado_texto = (
-                "-"
-                if presupuesto_entrenado is None
-                else f"Bs. {float(presupuesto_entrenado):.2f}"
-            )
-            st.caption(
-                f"Presupuesto clasificación: Bs. {float(resultado_hist['presupuesto_clasificacion']):.2f} | "
-                f"Presupuesto entrenamiento: {presupuesto_entrenado_texto}"
-            )
-            st.write("Vector generado")
-            st.json(resultado_hist["vector_generado"])
-            st.write("Distancias a centroides")
-            st.dataframe(resultado_hist["distancias_centroides"], use_container_width=True, hide_index=True)
+            save_expense(nombre, monto)
+            _set_flash("success", "El gasto fue guardado correctamente.")
+            st.rerun()
         except ValueError as error:
             st.error(str(error))
-        except Exception:
-            st.error("No se pudo clasificar el nuevo gasto con el modelo histórico.")
+
+with col_income:
+    st.subheader("Ingreso extra del mes")
+    st.caption("No se registra como gasto. Solo aumenta el presupuesto total disponible.")
+    with st.form("formulario_ingreso_extra"):
+        descripcion_ingreso = st.text_input("Descripcion del ingreso extra")
+        monto_ingreso = st.number_input("Monto del ingreso extra", min_value=0.0, step=0.5, format="%.2f")
+        ingreso_enviado = st.form_submit_button("Agregar ingreso extra", use_container_width=True)
+
+    if ingreso_enviado:
+        try:
+            guardar_ingreso_extra(descripcion_ingreso, monto_ingreso)
+            _set_flash("success", "El ingreso extra fue guardado y el presupuesto total se actualizo.")
+            st.rerun()
+        except ValueError as error:
+            st.error(str(error))
+
+st.subheader("Gastos registrados")
+st.dataframe(expenses, use_container_width=True, hide_index=True)
+
+if not ingresos_extra.empty:
+    st.subheader("Ingresos extra registrados")
+    st.dataframe(ingresos_extra, use_container_width=True, hide_index=True)
+
+if analisis_actual and analisis_actual.get("mensaje") is None:
+    resumen_avanzado = analisis_actual["resumen"]
+
+    st.subheader("Resumen financiero")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Total gastado", f"Bs. {resumen_avanzado['total_gastado']:.2f}")
+    col2.metric("Gastos hormiga", f"Bs. {resumen_avanzado['gastos_hormiga']:.2f}")
+    col3.metric("Gastos primarios", f"Bs. {resumen_avanzado['gastos_primarios']:.2f}")
+    col4.metric("Extraordinarios", f"Bs. {resumen_avanzado['gastos_extraordinarios']:.2f}")
+    col5.metric("Porcentaje hormiga", f"{resumen_avanzado['porcentaje_hormiga']:.1f}%")
+
+    st.subheader("Recomendacion mensual del agente")
+    render_recomendacion(analisis_actual["recomendacion"])
+elif analisis_actual and analisis_actual.get("mensaje"):
+    st.info(analisis_actual["mensaje"])
+elif modelo_historico.get("entrenado"):
+    st.subheader("Recomendacion mensual del agente")
+    recomendacion_historica = calcular_recomendacion_mensual(
+        presupuesto_total=presupuesto_total,
+        resumen_base=modelo_historico.get("resumen_entrenamiento", {}),
+    )
+    render_recomendacion(recomendacion_historica)
 else:
-    st.info("Todavía no hay un modelo histórico entrenado.")
+    st.info("Registra al menos dos gastos validos para activar el analisis y la recomendacion mensual.")
 
-st.divider()
-
-# ==================== CONTROLES DE DATOS ====================
-
+st.subheader("Controles de datos")
 st.download_button(
-    "Descargar CSV",
+    "Descargar CSV de gastos",
     data=get_user_csv_bytes(),
     file_name="gastos_usuario.csv",
     mime="text/csv",
+    use_container_width=True,
 )
-
 col_demo, col_reset = st.columns(2)
-
 with col_demo:
-    if st.button("Cargar dataset demo", width="stretch"):
+    if st.button("Cargar dataset demo", use_container_width=True):
         load_demo_data()
+        _set_flash("success", "Se cargo el dataset demo y se limpiaron ingresos extra previos.")
         st.rerun()
-
 with col_reset:
-    if st.button("Reiniciar datos", width="stretch"):
+    if st.button("Reiniciar datos", use_container_width=True):
         reset_user_data()
+        _set_flash("success", "Se reiniciaron gastos e ingresos extra.")
         st.rerun()

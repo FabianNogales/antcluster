@@ -224,3 +224,55 @@ def resumir_finanzas_avanzadas(
         "gastos_extraordinarios": gastos_extraordinarios,
         "porcentaje_hormiga": porcentaje_hormiga,
     }
+
+
+def calcular_recomendacion_mensual(
+    presupuesto_total: float = DEFAULT_PRESUPUESTO_TOTAL,
+    df_clasificado: pd.DataFrame | None = None,
+    resumen_base: dict | None = None,
+) -> dict:
+    """
+    Genera una recomendacion mensual a partir del patron actual o historico.
+
+    `resumen_base` permite reutilizar resumenes persistidos del modelo historico
+    sin exigir un DataFrame clasificado en memoria.
+    """
+    presupuesto = _safe_budget(presupuesto_total)
+
+    if resumen_base is None:
+        if df_clasificado is None or df_clasificado.empty:
+            raise ValueError("Se requiere un DataFrame clasificado o un resumen base.")
+        resumen = resumir_finanzas_avanzadas(df_clasificado, presupuesto_total=presupuesto)
+    else:
+        resumen = {
+            "gastos_primarios": float(resumen_base.get("gastos_primarios", 0.0) or 0.0),
+            "gastos_hormiga": float(resumen_base.get("gastos_hormiga", 0.0) or 0.0),
+            "gastos_extraordinarios": float(resumen_base.get("gastos_extraordinarios", 0.0) or 0.0),
+            "total_gastado": float(resumen_base.get("total_gastado", 0.0) or 0.0),
+            "porcentaje_hormiga": float(resumen_base.get("porcentaje_hormiga", 0.0) or 0.0),
+        }
+
+    ahorro_estimado = (
+        presupuesto
+        - resumen["gastos_primarios"]
+        - resumen["gastos_hormiga"]
+        - resumen["gastos_extraordinarios"]
+    )
+    porcentaje_comprometido = (
+        ((presupuesto - ahorro_estimado) / presupuesto) * 100.0 if presupuesto > 0 else 0.0
+    )
+
+    return {
+        "apartar_primarios": float(resumen["gastos_primarios"]),
+        "controlar_hormiga": float(resumen["gastos_hormiga"]),
+        "reservar_extraordinarios": float(resumen["gastos_extraordinarios"]),
+        "ahorro_estimado": float(ahorro_estimado),
+        "presupuesto_total": float(presupuesto),
+        "porcentaje_comprometido": float(porcentaje_comprometido),
+        "presupuesto_cubre_patron": bool(ahorro_estimado >= 0),
+        "mensaje": (
+            "El presupuesto no cubre el patrón actual de consumo."
+            if ahorro_estimado < 0
+            else "El patrón actual permite un ahorro estimado positivo."
+        ),
+    }

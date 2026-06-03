@@ -1,14 +1,29 @@
 # modulo de auditoria y explicabilidad visual
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
-import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 from scipy import stats
 
 from src.classifier import clasificar_patrones_avanzados
 from src.model import calcular_distancias_a_centroides
 from src.preprocessing import DEFAULT_PRESUPUESTO_TOTAL, normalizar_presupuesto_total
+
+
+def _color_categoria(categoria: str) -> str:
+    if categoria == "Gasto Primario":
+        return "#2ecc71"
+    if categoria == "Gasto Hormiga Recurrente":
+        return "#f1c40f"
+    if categoria == "Gasto Hormiga Ocasional":
+        return "#f39c12"
+    if categoria == "Gasto Extraordinario":
+        return "#e74c3c"
+    return "#000000"
+
 
 def _obtener_nombre_cluster(cluster_id: int, info: dict, df: pd.DataFrame) -> str:
     if info.get("cluster_hormiga") == cluster_id:
@@ -19,57 +34,114 @@ def _obtener_nombre_cluster(cluster_id: int, info: dict, df: pd.DataFrame) -> st
         resumen = info["resumen_por_cluster"]
         filtro = resumen[resumen["cluster"] == cluster_id]
         if not filtro.empty:
-            return filtro.iloc[0]["categoria_patron"]
+            return str(filtro.iloc[0]["categoria_patron"])
     return f"Perfil {cluster_id}"
 
-def _renderizar_justificacion_k(scores: pd.DataFrame, mejor_k: int):
-    st.markdown("### Selección automática del K óptimo")
-    st.write("El agente evaluó particiones iterativas usando Silhouette Score.")
+
+def formatear_etiqueta_cluster(cluster_id: int, info: dict, df: pd.DataFrame) -> str:
+    """Genera una etiqueta unica por cluster para la leyenda del simulador."""
+    categoria = _obtener_nombre_cluster(cluster_id, info, df)
+    return f"Cluster {cluster_id} - {categoria}"
+
+
+def _renderizar_justificacion_k(scores: pd.DataFrame, mejor_k: int) -> None:
+    st.markdown("### Seleccion automatica del K optimo")
+    st.write("El agente evaluo particiones iterativas usando Silhouette Score.")
     st.latex(r"s(i) = \frac{b(i) - a(i)}{\max\{a(i), b(i)\}}")
     if scores is not None and not scores.empty:
         st.dataframe(scores, hide_index=True)
-        st.markdown(f"**Decisión:** estructura establecida en K = {mejor_k}")
+        st.markdown(f"**Decision:** estructura establecida en K = {mejor_k}")
     else:
-        st.markdown("**Nota:** modelo ejecutado con K estático.")
+        st.markdown("**Nota:** modelo ejecutado con K estatico.")
 
-def _renderizar_radar(vector_gasto, centroide, columnas):
+
+def _renderizar_radar(vector_gasto, centroide, columnas) -> None:
     fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(r=vector_gasto, theta=columnas, fill='toself', name='gasto'))
-    fig.add_trace(go.Scatterpolar(r=centroide, theta=columnas, fill='toself', name='centroide'))
-    fig.update_layout(polar=dict(radialaxis=dict(visible=True)), showlegend=True, height=400, template="plotly_dark")
+    fig.add_trace(
+        go.Scatterpolar(
+            r=vector_gasto,
+            theta=columnas,
+            fill="toself",
+            name="Gasto seleccionado",
+            line=dict(color="#FF0000"),
+        )
+    )
+    fig.add_trace(
+        go.Scatterpolar(
+            r=centroide,
+            theta=columnas,
+            fill="toself",
+            name="Centroide asignado",
+            line=dict(color="#00FFFF"),
+        )
+    )
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True)),
+        showlegend=True,
+        height=400,
+        template="plotly_dark",
+    )
     st.plotly_chart(fig, use_container_width=True)
 
-def _renderizar_grafico_interactivo(vector_gasto, centroides, cluster_asignado, info, df, show_g, show_c):
+
+def _renderizar_grafico_interactivo(
+    vector_gasto,
+    centroides,
+    cluster_asignado,
+    info,
+    df,
+    show_g,
+    show_c,
+) -> None:
     fig = go.Figure()
-    
-    # grafica centroides
+
     if show_c:
-        for i, c in enumerate(centroides):
-            nombre_cluster = _obtener_nombre_cluster(i, info, df)
-            fig.add_trace(go.Scatter(
-                x=[c[2]], y=[c[0]], mode='markers+text',
-                marker=dict(size=20, symbol='star', color='#00FFFF', line=dict(width=1, color='black')),
-                name=nombre_cluster, text=[nombre_cluster], textposition="top center"
-            ))
-            
-    # grafica gasto
+        for i, centroide in enumerate(centroides):
+            categoria = _obtener_nombre_cluster(i, info, df)
+            nombre_cluster = formatear_etiqueta_cluster(i, info, df)
+            fig.add_trace(
+                go.Scatter(
+                    x=[centroide[2]],
+                    y=[centroide[0]],
+                    mode="markers+text",
+                    marker=dict(
+                        size=24 if i == cluster_asignado else 20,
+                        symbol="star",
+                        color="#00FFFF",
+                        line=dict(width=2, color=_color_categoria(categoria)),
+                    ),
+                    name=nombre_cluster,
+                    text=[nombre_cluster],
+                    textposition="top center",
+                )
+            )
+
     if show_g:
-        fig.add_trace(go.Scatter(
-            x=[vector_gasto[2]], y=[vector_gasto[0]], mode='markers',
-            marker=dict(size=15, color='#FF0000', line=dict(width=2, color='white')),
-            name='gasto'
-        ))
-        
-    fig.update_layout(title="proyeccion 2d interactiva", xaxis_title="frecuencia", yaxis_title="monto", template="plotly_dark")
+        fig.add_trace(
+            go.Scatter(
+                x=[vector_gasto[2]],
+                y=[vector_gasto[0]],
+                mode="markers",
+                marker=dict(size=15, color="#FF0000", line=dict(width=2, color="white")),
+                name="Gasto seleccionado",
+            )
+        )
+
+    fig.update_layout(
+        title="Proyeccion 2D interactiva",
+        xaxis_title="Frecuencia",
+        yaxis_title="Monto",
+        template="plotly_dark",
+        legend=dict(title="Leyenda"),
+    )
     st.plotly_chart(fig, use_container_width=True)
 
-def _renderizar_vista_nodo(registro, centroides, columnas, info, df):
-    nombre = registro.get('nombre', 'desconocido')
-    cluster_id = int(registro.get('cluster', -1))
-    
-    # calculo de z-score
+
+def _renderizar_vista_nodo(registro, centroides, columnas, info, df) -> None:
+    nombre = registro.get("nombre", "desconocido")
+    cluster_id = int(registro.get("cluster", -1))
+
     distancias_df = calcular_distancias_a_centroides([float(registro[c]) for c in columnas], centroides)
-    dist_real = float(distancias_df[distancias_df["cluster"] == cluster_id]["distancia"].iloc[0])
     z_scores = stats.zscore(distancias_df["distancia"].to_numpy(dtype=float), ddof=0, nan_policy="omit")
     if np.isnan(z_scores).all():
         z_score = 0.0
@@ -77,20 +149,33 @@ def _renderizar_vista_nodo(registro, centroides, columnas, info, df):
         idx = int(distancias_df.index[distancias_df["cluster"] == cluster_id][0])
         z_score = float(np.nan_to_num(z_scores[idx], nan=0.0))
 
-    st.markdown(f"### Análisis: {nombre}")
-    
-    # controles con key unico
+    st.markdown(f"### Analisis: {nombre}")
+
     col_ctrl1, col_ctrl2 = st.columns(2)
     show_g = col_ctrl1.checkbox("Mostrar gasto", True, key=f"show_g_{nombre}")
     show_c = col_ctrl2.checkbox("Mostrar centroides", True, key=f"show_c_{nombre}")
-    
-    _renderizar_grafico_interactivo([float(registro[c]) for c in columnas], centroides, cluster_id, info, df, show_g, show_c)
-    
+
+    _renderizar_grafico_interactivo(
+        [float(registro[c]) for c in columnas],
+        centroides,
+        cluster_id,
+        info,
+        df,
+        show_g,
+        show_c,
+    )
+
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("#### 1. Trazabilidad vectorial")
         df_vec = pd.DataFrame({"dimension": columnas, "valor": [float(registro[c]) for c in columnas]})
-        fig_scatter = px.scatter(df_vec, x="dimension", y="valor", size="valor", color="dimension")
+        fig_scatter = px.scatter(
+            df_vec,
+            x="dimension",
+            y="valor",
+            size="valor",
+            color="dimension",
+        )
         fig_scatter.update_layout(template="plotly_dark")
         st.plotly_chart(fig_scatter, use_container_width=True)
         st.write(f"**Z-score:** {z_score:.2f}")
@@ -98,34 +183,44 @@ def _renderizar_vista_nodo(registro, centroides, columnas, info, df):
     with col2:
         st.markdown("#### 2. Comparativa multidimensional")
         _renderizar_radar([float(registro[c]) for c in columnas], centroides[cluster_id], columnas)
-        
-    st.markdown(f"**Asignación:** {_obtener_nombre_cluster(cluster_id, info, df)}")
 
-def _renderizar_glosario():
+    st.markdown(f"**Asignacion:** {formatear_etiqueta_cluster(cluster_id, info, df)}")
+
+
+def _renderizar_glosario() -> None:
     with st.expander("Conceptos clave del modelo"):
-        st.markdown("""
-        - **Silhouette Score:** mide qué tan bien se ajusta cada dato a su grupo asignado. El valor va de -1 a 1.
-        - **Z-score:** mide la desviación de un dato respecto al promedio del clúster.
-        - **Centroide:** es el punto central o promedio aritmético de todos los puntos en un clúster.
-        """)
+        st.markdown(
+            """
+            - **Silhouette Score:** mide que tan bien se ajusta cada dato a su grupo asignado. El valor va de -1 a 1.
+            - **Z-score:** mide la desviacion de un dato respecto al promedio del cluster.
+            - **Centroide:** es el punto central o promedio aritmetico de todos los puntos en un cluster.
+            """
+        )
 
-def renderizar_simulador_completo(datos_modelo: dict):
+
+def renderizar_simulador_completo(datos_modelo: dict) -> None:
     presupuesto_base = normalizar_presupuesto_total(
         st.session_state.get("presupuesto_total", datos_modelo.get("presupuesto_total", DEFAULT_PRESUPUESTO_TOTAL)),
         fallback=DEFAULT_PRESUPUESTO_TOTAL,
         allow_non_positive=True,
     )
 
-    # estado de presupuesto
     if "presupuesto_auditoria" not in st.session_state:
         st.session_state["presupuesto_auditoria"] = float(presupuesto_base)
+    rango_maximo = max(100.0, presupuesto_base * 2.0 if presupuesto_base > 0 else 100.0)
     valor_inicial_slider = float(st.session_state["presupuesto_auditoria"])
-    valor_inicial_slider = min(max(valor_inicial_slider, 50.0), 1000.0)
+    valor_inicial_slider = min(max(valor_inicial_slider, 0.0), rango_maximo)
 
-    st.markdown("### Análisis de sensibilidad")
-    nuevo_presupuesto = st.slider("Ajuste de presupuesto total", 50.0, 1000.0, valor_inicial_slider)
+    st.markdown("### Analisis de sensibilidad")
+    nuevo_presupuesto = st.slider(
+        "Ajuste de presupuesto total",
+        min_value=0.0,
+        max_value=float(rango_maximo),
+        value=float(valor_inicial_slider),
+        step=10.0,
+    )
     st.session_state["presupuesto_auditoria"] = nuevo_presupuesto
-    
+
     df_raw = datos_modelo.get("df")
     centroides = datos_modelo.get("centroides")
     mejor_k = datos_modelo.get("mejor_k", 2)
@@ -152,7 +247,7 @@ def renderizar_simulador_completo(datos_modelo: dict):
     ]
     st.dataframe(df[columnas_historial], use_container_width=True, hide_index=True)
 
-    st.markdown("### Vectorización y matriz X")
+    st.markdown("### Vectorizacion y matriz X")
     columnas_x = [c for c in columnas if c in df.columns]
     st.dataframe(df[columnas_x], use_container_width=True, hide_index=True)
 
@@ -160,9 +255,15 @@ def renderizar_simulador_completo(datos_modelo: dict):
         st.markdown("### Centroides")
         centroides_df = pd.DataFrame(centroides, columns=columnas)
         centroides_df.insert(0, "cluster", range(len(centroides_df)))
+        centroides_df["etiqueta"] = [
+            formatear_etiqueta_cluster(int(cluster_id), info_avanzada, df)
+            for cluster_id in centroides_df["cluster"]
+        ]
         st.dataframe(centroides_df, use_container_width=True, hide_index=True)
-    
-    pestana_k, pestana_reciente, pestana_general = st.tabs(["Justificación de K", "Análisis reciente", "Trazabilidad"])
+
+    pestana_k, pestana_reciente, pestana_general = st.tabs(
+        ["Justificacion de K", "Analisis reciente", "Trazabilidad"]
+    )
 
     with pestana_k:
         _renderizar_glosario()
@@ -176,5 +277,3 @@ def renderizar_simulador_completo(datos_modelo: dict):
         nombre = st.selectbox("Directorio de gastos", options=df_unicos["nombre"].tolist())
         registro = df_unicos[df_unicos["nombre"] == nombre].iloc[0]
         _renderizar_vista_nodo(registro, centroides, columnas, info_avanzada, df)
-
-

@@ -9,10 +9,12 @@ from src.preprocessing import calcular_frecuencia_mensual_oficial
 
 
 OFFICIAL_COLUMNS = ["id", "nombre", "monto", "fecha", "hora", "frecuencia"]
+EXTRA_INCOME_COLUMNS = ["id", "descripcion", "monto", "fecha", "hora"]
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 USER_CSV = DATA_DIR / "gastos_usuario.csv"
 DEMO_CSV = DATA_DIR / "gastos_demo.csv"
+EXTRA_INCOME_CSV = DATA_DIR / "ingresos_extra.csv"
 
 DEMO_DATA = [
     {"id": 1, "nombre": "Pasaje", "monto": 3.0, "fecha": "2026-05-01", "hora": "07:30", "frecuencia": 2},
@@ -37,6 +39,10 @@ def _empty_expenses_df() -> pd.DataFrame:
     return pd.DataFrame(columns=OFFICIAL_COLUMNS)
 
 
+def _empty_extra_income_df() -> pd.DataFrame:
+    return pd.DataFrame(columns=EXTRA_INCOME_COLUMNS)
+
+
 def _normalize_expenses_df(df: pd.DataFrame) -> pd.DataFrame:
     """Garantiza columnas oficiales, tipos basicos y orden estable."""
     if df.empty:
@@ -58,6 +64,25 @@ def _normalize_expenses_df(df: pd.DataFrame) -> pd.DataFrame:
     return normalized
 
 
+def _normalize_extra_income_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Garantiza columnas oficiales para ingresos extra y tipos compatibles."""
+    if df.empty:
+        return _empty_extra_income_df()
+
+    normalized = df.copy()
+    for column in EXTRA_INCOME_COLUMNS:
+        if column not in normalized.columns:
+            normalized[column] = pd.NA
+
+    normalized = normalized[EXTRA_INCOME_COLUMNS]
+    normalized["descripcion"] = normalized["descripcion"].fillna("").astype(str).str.strip()
+    normalized["monto"] = pd.to_numeric(normalized["monto"], errors="coerce").fillna(0.0)
+    normalized["id"] = pd.to_numeric(normalized["id"], errors="coerce")
+    normalized["fecha"] = normalized["fecha"].fillna("").astype(str)
+    normalized["hora"] = normalized["hora"].fillna("").astype(str)
+    return normalized
+
+
 def _read_csv(path: Path) -> pd.DataFrame:
     """Lee un CSV y devuelve un DataFrame compatible aunque este vacio."""
     ensure_data_folder()
@@ -76,6 +101,12 @@ def _read_csv(path: Path) -> pd.DataFrame:
 def _write_csv(df: pd.DataFrame, path: Path) -> None:
     ensure_data_folder()
     normalized = _normalize_expenses_df(df)
+    normalized.to_csv(path, index=False)
+
+
+def _write_extra_income_csv(df: pd.DataFrame, path: Path) -> None:
+    ensure_data_folder()
+    normalized = _normalize_extra_income_df(df)
     normalized.to_csv(path, index=False)
 
 
@@ -119,6 +150,21 @@ def create_user_csv_if_not_exists() -> None:
     _write_csv(df, USER_CSV)
 
 
+def create_extra_income_csv_if_not_exists() -> None:
+    """Crea data/ingresos_extra.csv con encabezados si no existe."""
+    ensure_data_folder()
+
+    if not EXTRA_INCOME_CSV.exists() or EXTRA_INCOME_CSV.stat().st_size == 0:
+        _empty_extra_income_df().to_csv(EXTRA_INCOME_CSV, index=False)
+        return
+
+    try:
+        df = pd.read_csv(EXTRA_INCOME_CSV)
+    except (pd.errors.EmptyDataError, pd.errors.ParserError, OSError):
+        df = _empty_extra_income_df()
+    _write_extra_income_csv(df, EXTRA_INCOME_CSV)
+
+
 def create_demo_csv_if_not_exists() -> None:
     """Crea data/gastos_demo.csv con datos de ejemplo si falta o esta vacio."""
     ensure_data_folder()
@@ -139,6 +185,7 @@ def initialize_data_files() -> None:
     ensure_data_folder()
     create_user_csv_if_not_exists()
     create_demo_csv_if_not_exists()
+    create_extra_income_csv_if_not_exists()
 
 
 def read_expenses() -> pd.DataFrame:
@@ -146,6 +193,16 @@ def read_expenses() -> pd.DataFrame:
     create_user_csv_if_not_exists()
     df = _read_csv(USER_CSV)
     return recalculate_frequencies(df)
+
+
+def leer_ingresos_extra() -> pd.DataFrame:
+    """Lee los ingresos extra del usuario desde data/ingresos_extra.csv."""
+    create_extra_income_csv_if_not_exists()
+    try:
+        df = pd.read_csv(EXTRA_INCOME_CSV)
+    except pd.errors.EmptyDataError:
+        return _empty_extra_income_df()
+    return _normalize_extra_income_df(df)
 
 
 def recalculate_frequencies(df: pd.DataFrame) -> pd.DataFrame:
@@ -199,17 +256,84 @@ def save_expense(
     return updated_df
 
 
+def guardar_ingreso_extra(
+    descripcion: str,
+    monto: float,
+    fecha: str | date | datetime | None = None,
+    hora: str | time | datetime | None = None,
+) -> pd.DataFrame:
+    """Guarda un ingreso adicional sin mezclarlo con el flujo de gastos."""
+    clean_description = descripcion.strip()
+    if not clean_description:
+        raise ValueError("La descripcion del ingreso extra no puede estar vacia.")
+
+    amount = float(monto)
+    if amount <= 0:
+        raise ValueError("El monto del ingreso extra debe ser mayor a 0.")
+
+    income_date = _format_date(fecha)
+    income_hour = _format_time(hora)
+
+    df = leer_ingresos_extra()
+    next_id = _get_next_id(df)
+    new_income = pd.DataFrame(
+        [
+            {
+                "id": next_id,
+                "descripcion": clean_description,
+                "monto": amount,
+                "fecha": income_date,
+                "hora": income_hour,
+            }
+        ],
+        columns=EXTRA_INCOME_COLUMNS,
+    )
+
+    updated_df = pd.concat([df, new_income], ignore_index=True)
+    _write_extra_income_csv(updated_df, EXTRA_INCOME_CSV)
+    return updated_df
+
+
+def calcular_presupuesto_actualizado(
+    presupuesto_base: float,
+    ingresos_extra: pd.DataFrame | None = None,
+) -> float:
+    """Suma los ingresos extra validos al presupuesto base del mes."""
+    try:
+        base = float(presupuesto_base)
+    except (TypeError, ValueError):
+        base = 0.0
+
+    df_ingresos = leer_ingresos_extra() if ingresos_extra is None else _normalize_extra_income_df(ingresos_extra)
+    total_extra = float(df_ingresos["monto"].sum()) if not df_ingresos.empty else 0.0
+    return base + total_extra
+
+
+def get_extra_income_summary() -> dict[str, float | int]:
+    """Calcula metricas basicas de los ingresos extra registrados."""
+    df = leer_ingresos_extra()
+    total_income = float(df["monto"].sum()) if not df.empty else 0.0
+    average_income = float(df["monto"].mean()) if not df.empty else 0.0
+    return {
+        "cantidad_ingresos": int(len(df)),
+        "total_ingresos_extra": total_income,
+        "promedio_ingreso_extra": average_income,
+    }
+
+
 def reset_user_data() -> None:
-    """Reinicia el CSV de usuario, manteniendo solo los encabezados."""
+    """Reinicia gastos e ingresos extra, manteniendo solo los encabezados."""
     ensure_data_folder()
     _empty_expenses_df().to_csv(USER_CSV, index=False)
+    _empty_extra_income_df().to_csv(EXTRA_INCOME_CSV, index=False)
 
 
 def load_demo_data() -> pd.DataFrame:
-    """Copia los datos demo hacia el CSV de usuario."""
+    """Copia los datos demo hacia el CSV de usuario y limpia ingresos extra."""
     create_demo_csv_if_not_exists()
     demo_df = recalculate_frequencies(_read_csv(DEMO_CSV))
     _write_csv(demo_df, USER_CSV)
+    _empty_extra_income_df().to_csv(EXTRA_INCOME_CSV, index=False)
     return demo_df
 
 
