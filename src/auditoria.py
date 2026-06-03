@@ -11,18 +11,19 @@ from scipy import stats
 from src.classifier import clasificar_patrones_avanzados
 from src.model import calcular_distancias_a_centroides
 from src.preprocessing import DEFAULT_PRESUPUESTO_TOTAL, normalizar_presupuesto_total
+from src.theme import ACCENT, DANGER, TEXT_MAIN, WARNING, style_plotly_figure
 
 
 def _color_categoria(categoria: str) -> str:
     if categoria == "Gasto Primario":
-        return "#2ecc71"
+        return ACCENT
     if categoria == "Gasto Hormiga Recurrente":
-        return "#f1c40f"
+        return WARNING
     if categoria == "Gasto Hormiga Ocasional":
-        return "#f39c12"
+        return "#4aa3ff"
     if categoria == "Gasto Extraordinario":
-        return "#e74c3c"
-    return "#000000"
+        return DANGER
+    return TEXT_MAIN
 
 
 def _obtener_nombre_cluster(cluster_id: int, info: dict, df: pd.DataFrame) -> str:
@@ -63,7 +64,7 @@ def _renderizar_radar(vector_gasto, centroide, columnas) -> None:
             theta=columnas,
             fill="toself",
             name="Gasto seleccionado",
-            line=dict(color="#FF0000"),
+            line=dict(color=DANGER),
         )
     )
     fig.add_trace(
@@ -72,15 +73,15 @@ def _renderizar_radar(vector_gasto, centroide, columnas) -> None:
             theta=columnas,
             fill="toself",
             name="Centroide asignado",
-            line=dict(color="#00FFFF"),
+            line=dict(color=ACCENT),
         )
     )
     fig.update_layout(
         polar=dict(radialaxis=dict(visible=True)),
         showlegend=True,
         height=400,
-        template="plotly_dark",
     )
+    style_plotly_figure(fig)
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -107,7 +108,7 @@ def _renderizar_grafico_interactivo(
                     marker=dict(
                         size=24 if i == cluster_asignado else 20,
                         symbol="star",
-                        color="#00FFFF",
+                        color=ACCENT,
                         line=dict(width=2, color=_color_categoria(categoria)),
                     ),
                     name=nombre_cluster,
@@ -122,7 +123,7 @@ def _renderizar_grafico_interactivo(
                 x=[vector_gasto[2]],
                 y=[vector_gasto[0]],
                 mode="markers",
-                marker=dict(size=15, color="#FF0000", line=dict(width=2, color="white")),
+                marker=dict(size=15, color=DANGER, line=dict(width=2, color=TEXT_MAIN)),
                 name="Gasto seleccionado",
             )
         )
@@ -131,9 +132,9 @@ def _renderizar_grafico_interactivo(
         title="Proyeccion 2D interactiva",
         xaxis_title="Frecuencia",
         yaxis_title="Monto",
-        template="plotly_dark",
         legend=dict(title="Leyenda"),
     )
+    style_plotly_figure(fig)
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -176,7 +177,7 @@ def _renderizar_vista_nodo(registro, centroides, columnas, info, df) -> None:
             size="valor",
             color="dimension",
         )
-        fig_scatter.update_layout(template="plotly_dark")
+        style_plotly_figure(fig_scatter)
         st.plotly_chart(fig_scatter, use_container_width=True)
         st.write(f"**Z-score:** {z_score:.2f}")
 

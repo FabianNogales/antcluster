@@ -8,6 +8,7 @@ from src.analisis import ejecutar_analisis_agente, render_recomendacion
 from src.classifier import calcular_recomendacion_mensual
 from src.historico import cargar_modelo_historico, inicializar_archivos_historicos
 from src.sidebar import render_sidebar_presupuesto
+from src.theme import apply_app_theme
 from src.utils import (
     get_expenses_summary,
     get_user_csv_bytes,
@@ -21,6 +22,7 @@ from src.utils import (
 
 
 st.set_page_config(page_title="AntCluster - Gestion de datos", layout="wide")
+apply_app_theme()
 initialize_data_files()
 inicializar_archivos_historicos()
 

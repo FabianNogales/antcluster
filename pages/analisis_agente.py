@@ -7,10 +7,12 @@ import streamlit as st
 from src.analisis import ejecutar_analisis_agente
 from src.historico import inicializar_archivos_historicos
 from src.sidebar import render_sidebar_presupuesto
+from src.theme import apply_app_theme
 from src.utils import initialize_data_files, read_expenses
 
 
 st.set_page_config(page_title="Analisis del agente", layout="wide")
+apply_app_theme()
 initialize_data_files()
 inicializar_archivos_historicos()
 
