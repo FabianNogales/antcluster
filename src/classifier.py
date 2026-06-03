@@ -14,6 +14,21 @@ from src.preprocessing import (
 
 logger = logging.getLogger(__name__)
 
+_MESES_ES = {
+    1: "enero",
+    2: "febrero",
+    3: "marzo",
+    4: "abril",
+    5: "mayo",
+    6: "junio",
+    7: "julio",
+    8: "agosto",
+    9: "septiembre",
+    10: "octubre",
+    11: "noviembre",
+    12: "diciembre",
+}
+
 
 def clasificar_y_resumir(df_gastos: pd.DataFrame, presupuesto_total: float) -> dict:
     """
@@ -226,23 +241,110 @@ def resumir_finanzas_avanzadas(
     }
 
 
+def _etiqueta_periodo(periodo: pd.Period) -> str:
+    mes = _MESES_ES.get(int(periodo.month), f"mes {int(periodo.month):02d}")
+    return f"{mes} {int(periodo.year)}"
+
+
+def _resumen_promedio_mensual(
+    df_clasificado: pd.DataFrame,
+    periodos: pd.Series,
+    cantidad_meses: int,
+) -> dict:
+    monto = pd.to_numeric(df_clasificado["monto"], errors="coerce").fillna(0.0)
+    categoria = df_clasificado["categoria_patron"].fillna("").astype(str)
+
+    mask_periodo_valido = periodos.notna()
+    mask_hormiga = categoria.str.contains("Hormiga", case=False, na=False)
+    mask_primario = categoria == "Gasto Primario"
+    mask_extraordinario = categoria == "Gasto Extraordinario"
+    divisor = max(int(cantidad_meses), 1)
+
+    return {
+        "total_gastado": float(monto[mask_periodo_valido].sum() / divisor),
+        "gastos_hormiga": float(monto[mask_hormiga & mask_periodo_valido].sum() / divisor),
+        "gastos_primarios": float(monto[mask_primario & mask_periodo_valido].sum() / divisor),
+        "gastos_extraordinarios": float(monto[mask_extraordinario & mask_periodo_valido].sum() / divisor),
+        "porcentaje_hormiga": 0.0,
+    }
+
+
+def _metadata_fallback_periodo() -> dict:
+    return {
+        "periodo_usado": "conjunto_actual",
+        "periodo_texto": "conjunto actual",
+        "modo_recomendacion": "fallback",
+        "cantidad_meses": 0,
+        "advertencia_periodo": "No se pudo detectar un periodo mensual; se usa el conjunto actual como referencia.",
+    }
+
+
+def _obtener_resumen_recomendacion(
+    df_clasificado: pd.DataFrame | None,
+    presupuesto: float,
+    modo: str,
+) -> tuple[dict, dict]:
+    if df_clasificado is None or df_clasificado.empty:
+        raise ValueError("Se requiere un DataFrame clasificado o un resumen base.")
+
+    if "fecha" not in df_clasificado.columns:
+        resumen = resumir_finanzas_avanzadas(df_clasificado, presupuesto_total=presupuesto)
+        return resumen, _metadata_fallback_periodo()
+
+    fechas = pd.to_datetime(df_clasificado["fecha"], errors="coerce")
+    periodos = fechas.dt.to_period("M")
+    periodos_validos = periodos.dropna()
+    if periodos_validos.empty:
+        resumen = resumir_finanzas_avanzadas(df_clasificado, presupuesto_total=presupuesto)
+        return resumen, _metadata_fallback_periodo()
+
+    if modo == "promedio_12_meses":
+        cantidad_meses = int(periodos_validos.nunique())
+        resumen = _resumen_promedio_mensual(df_clasificado, periodos, cantidad_meses)
+        return resumen, {
+            "periodo_usado": "promedio_mensual",
+            "periodo_texto": f"promedio mensual de {cantidad_meses} meses",
+            "modo_recomendacion": "promedio_12_meses",
+            "cantidad_meses": cantidad_meses,
+            "advertencia_periodo": None,
+        }
+
+    ultimo_periodo = periodos_validos.max()
+    df_mes = df_clasificado.loc[periodos == ultimo_periodo].copy()
+    resumen = resumir_finanzas_avanzadas(df_mes, presupuesto_total=presupuesto)
+    return resumen, {
+        "periodo_usado": str(ultimo_periodo),
+        "periodo_texto": _etiqueta_periodo(ultimo_periodo),
+        "modo_recomendacion": "ultimo_mes",
+        "cantidad_meses": 1,
+        "advertencia_periodo": None,
+    }
+
+
 def calcular_recomendacion_mensual(
     presupuesto_total: float = DEFAULT_PRESUPUESTO_TOTAL,
     df_clasificado: pd.DataFrame | None = None,
     resumen_base: dict | None = None,
+    modo: str = "ultimo_mes",
 ) -> dict:
     """
-    Genera una recomendacion mensual a partir del patron actual o historico.
+    Genera una recomendacion mensual a partir del ultimo periodo disponible.
 
     `resumen_base` permite reutilizar resumenes persistidos del modelo historico
-    sin exigir un DataFrame clasificado en memoria.
+    sin exigir un DataFrame clasificado en memoria. Si existe fecha, el DataFrame
+    se reduce a una referencia mensual antes de compararlo contra el presupuesto.
     """
     presupuesto = _safe_budget(presupuesto_total)
+    modo_normalizado = str(modo or "ultimo_mes").strip().lower()
+    if modo_normalizado not in {"ultimo_mes", "promedio_12_meses"}:
+        modo_normalizado = "ultimo_mes"
 
     if resumen_base is None:
-        if df_clasificado is None or df_clasificado.empty:
-            raise ValueError("Se requiere un DataFrame clasificado o un resumen base.")
-        resumen = resumir_finanzas_avanzadas(df_clasificado, presupuesto_total=presupuesto)
+        resumen, metadata = _obtener_resumen_recomendacion(
+            df_clasificado=df_clasificado,
+            presupuesto=presupuesto,
+            modo=modo_normalizado,
+        )
     else:
         resumen = {
             "gastos_primarios": float(resumen_base.get("gastos_primarios", 0.0) or 0.0),
@@ -251,28 +353,34 @@ def calcular_recomendacion_mensual(
             "total_gastado": float(resumen_base.get("total_gastado", 0.0) or 0.0),
             "porcentaje_hormiga": float(resumen_base.get("porcentaje_hormiga", 0.0) or 0.0),
         }
+        metadata = {
+            "periodo_usado": "resumen_base",
+            "periodo_texto": "resumen historico disponible",
+            "modo_recomendacion": "resumen_base",
+            "cantidad_meses": 0,
+            "advertencia_periodo": "No se pudo detectar un periodo mensual; se usa el conjunto actual como referencia.",
+        }
 
-    ahorro_estimado = (
-        presupuesto
-        - resumen["gastos_primarios"]
-        - resumen["gastos_hormiga"]
-        - resumen["gastos_extraordinarios"]
+    total_recomendado = (
+        resumen["gastos_primarios"] + resumen["gastos_hormiga"] + resumen["gastos_extraordinarios"]
     )
+    ahorro_estimado = presupuesto - total_recomendado
     porcentaje_comprometido = (
-        ((presupuesto - ahorro_estimado) / presupuesto) * 100.0 if presupuesto > 0 else 0.0
+        (total_recomendado / presupuesto) * 100.0 if presupuesto > 0 else 0.0
     )
 
     return {
         "apartar_primarios": float(resumen["gastos_primarios"]),
         "controlar_hormiga": float(resumen["gastos_hormiga"]),
         "reservar_extraordinarios": float(resumen["gastos_extraordinarios"]),
+        "total_recomendado_mes": float(total_recomendado),
         "ahorro_estimado": float(ahorro_estimado),
         "presupuesto_total": float(presupuesto),
         "porcentaje_comprometido": float(porcentaje_comprometido),
+        "compromiso_presupuesto": float(porcentaje_comprometido),
         "presupuesto_cubre_patron": bool(ahorro_estimado >= 0),
-        "mensaje": (
-            "El presupuesto no cubre el patrón actual de consumo."
-            if ahorro_estimado < 0
-            else "El patrón actual permite un ahorro estimado positivo."
-        ),
+        "mensaje": "El presupuesto no cubre el patron mensual de consumo."
+        if ahorro_estimado < 0
+        else "El patron mensual permite un ahorro estimado positivo.",
+        **metadata,
     }

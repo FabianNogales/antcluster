@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.analisis import ejecutar_analisis_agente, render_recomendacion
-from src.classifier import calcular_recomendacion_mensual
+from src.analisis import ejecutar_analisis_agente, ejecutar_recomendacion_historica, render_recomendacion
 from src.historico import cargar_modelo_historico, inicializar_archivos_historicos
 from src.sidebar import render_sidebar_presupuesto
 from src.theme import apply_app_theme
@@ -119,11 +118,11 @@ elif analisis_actual and analisis_actual.get("mensaje"):
     st.info(analisis_actual["mensaje"])
 elif modelo_historico.get("entrenado"):
     st.subheader("Recomendacion mensual del agente")
-    recomendacion_historica = calcular_recomendacion_mensual(
-        presupuesto_total=presupuesto_total,
-        resumen_base=modelo_historico.get("resumen_entrenamiento", {}),
-    )
-    render_recomendacion(recomendacion_historica)
+    recomendacion_historica = ejecutar_recomendacion_historica(presupuesto_total)
+    if recomendacion_historica is None:
+        st.info("No hay datos historicos suficientes para calcular una recomendacion mensual.")
+    else:
+        render_recomendacion(recomendacion_historica)
 else:
     st.info("Registra al menos dos gastos validos para activar el analisis y la recomendacion mensual.")
 

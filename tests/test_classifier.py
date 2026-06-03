@@ -175,6 +175,102 @@ class TestClassifierAdvanced(unittest.TestCase):
         self.assertFalse(recomendacion["presupuesto_cubre_patron"])
         self.assertIn("no cubre", recomendacion["mensaje"])
 
+    def test_calcular_recomendacion_mensual_usa_ultimo_mes_historico(self) -> None:
+        rows = []
+        for month in range(1, 12):
+            rows.extend(
+                [
+                    {
+                        "nombre": f"Primario {month}",
+                        "monto": 1000.0,
+                        "fecha": f"2025-{month:02d}-01",
+                        "categoria_patron": "Gasto Primario",
+                    },
+                    {
+                        "nombre": f"Hormiga {month}",
+                        "monto": 500.0,
+                        "fecha": f"2025-{month:02d}-02",
+                        "categoria_patron": "Gasto Hormiga Recurrente",
+                    },
+                    {
+                        "nombre": f"Extra {month}",
+                        "monto": 250.0,
+                        "fecha": f"2025-{month:02d}-03",
+                        "categoria_patron": "Gasto Extraordinario",
+                    },
+                ]
+            )
+        rows.extend(
+            [
+                {"nombre": "Alquiler", "monto": 100.0, "fecha": "2026-05-01", "categoria_patron": "Gasto Primario"},
+                {
+                    "nombre": "Transporte",
+                    "monto": 20.0,
+                    "fecha": "2026-05-02",
+                    "categoria_patron": "Gasto Hormiga Recurrente",
+                },
+                {
+                    "nombre": "Cafe",
+                    "monto": 5.0,
+                    "fecha": "2026-05-03",
+                    "categoria_patron": "Gasto Hormiga Ocasional",
+                },
+                {
+                    "nombre": "Reparacion",
+                    "monto": 40.0,
+                    "fecha": "2026-05-04",
+                    "categoria_patron": "Gasto Extraordinario",
+                },
+            ]
+        )
+
+        recomendacion = calcular_recomendacion_mensual(
+            presupuesto_total=500.0,
+            df_clasificado=pd.DataFrame(rows),
+            modo="ultimo_mes",
+        )
+
+        self.assertEqual(recomendacion["periodo_usado"], "2026-05")
+        self.assertEqual(recomendacion["periodo_texto"], "mayo 2026")
+        self.assertAlmostEqual(recomendacion["apartar_primarios"], 100.0, places=1)
+        self.assertAlmostEqual(recomendacion["controlar_hormiga"], 25.0, places=1)
+        self.assertAlmostEqual(recomendacion["reservar_extraordinarios"], 40.0, places=1)
+        self.assertAlmostEqual(recomendacion["total_recomendado_mes"], 165.0, places=1)
+        self.assertAlmostEqual(recomendacion["ahorro_estimado"], 335.0, places=1)
+        self.assertAlmostEqual(recomendacion["compromiso_presupuesto"], 33.0, places=1)
+
+    def test_calcular_recomendacion_mensual_cambia_con_presupuesto_total(self) -> None:
+        df = pd.DataFrame(
+            [
+                {"monto": 100.0, "fecha": "2026-05-01", "categoria_patron": "Gasto Primario"},
+                {"monto": 25.0, "fecha": "2026-05-02", "categoria_patron": "Gasto Hormiga Recurrente"},
+                {"monto": 40.0, "fecha": "2026-05-03", "categoria_patron": "Gasto Extraordinario"},
+            ]
+        )
+
+        recomendacion_500 = calcular_recomendacion_mensual(presupuesto_total=500.0, df_clasificado=df)
+        recomendacion_300 = calcular_recomendacion_mensual(presupuesto_total=300.0, df_clasificado=df)
+
+        self.assertAlmostEqual(recomendacion_500["total_recomendado_mes"], 165.0, places=1)
+        self.assertAlmostEqual(recomendacion_500["ahorro_estimado"], 335.0, places=1)
+        self.assertAlmostEqual(recomendacion_300["total_recomendado_mes"], 165.0, places=1)
+        self.assertAlmostEqual(recomendacion_300["ahorro_estimado"], 135.0, places=1)
+        self.assertAlmostEqual(recomendacion_300["compromiso_presupuesto"], 55.0, places=1)
+
+    def test_calcular_recomendacion_mensual_sin_fecha_usa_fallback(self) -> None:
+        df = pd.DataFrame(
+            [
+                {"monto": 100.0, "categoria_patron": "Gasto Primario"},
+                {"monto": 25.0, "categoria_patron": "Gasto Hormiga Ocasional"},
+            ]
+        )
+
+        recomendacion = calcular_recomendacion_mensual(presupuesto_total=500.0, df_clasificado=df)
+
+        self.assertEqual(recomendacion["modo_recomendacion"], "fallback")
+        self.assertIn("No se pudo detectar", recomendacion["advertencia_periodo"])
+        self.assertAlmostEqual(recomendacion["total_recomendado_mes"], 125.0, places=1)
+
     def test_clasificar_patrones_avanzados_requiere_cluster(self) -> None:
         df = pd.DataFrame({"nombre": ["Cafe"], "monto": [5.0], "frecuencia": [3]})
         with self.assertRaises(ValueError):
